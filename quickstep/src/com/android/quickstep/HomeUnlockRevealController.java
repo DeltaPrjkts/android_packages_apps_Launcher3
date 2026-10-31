@@ -111,7 +111,7 @@ public final class HomeUnlockRevealController
                     mWorkspaceAnimation.getUnlockAmount(), unlocked ? 1f : 0f);
             mAnimator = animator;
             animator.setDuration(Math.max(0L, duration));
-            animator.setStartDelay(unlocked ? 0L : Math.max(0L, startDelay));
+            animator.setStartDelay(Math.max(0L, startDelay));
             animator.setInterpolator(EMPHASIZED_DECELERATE);
             animator.addUpdateListener(value -> mWorkspaceAnimation.setUnlockAmount(
                     (Float) value.getAnimatedValue()));
