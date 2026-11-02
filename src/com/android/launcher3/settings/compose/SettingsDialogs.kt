@@ -14,6 +14,9 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
@@ -152,6 +155,14 @@ private fun Sheet(
     content: @Composable ColumnScope.(dismiss: () -> Unit) -> Unit,
 ) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val contentMotionScheme = MaterialTheme.motionScheme
+    val sheetMotionScheme =
+        remember(contentMotionScheme) {
+            object : MotionScheme by contentMotionScheme {
+                override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> =
+                    tween(durationMillis = 300)
+            }
+        }
     val scope = rememberCoroutineScope()
     var closing by remember { mutableStateOf(false) }
     val dismiss: () -> Unit = {
@@ -163,14 +174,27 @@ private fun Sheet(
             }
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineSmallEmphasized,
-                modifier = Modifier.padding(bottom = 20.dp),
-            )
-            content(dismiss)
+    MaterialTheme(motionScheme = sheetMotionScheme) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            modifier =
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+            sheetState = state,
+        ) {
+            CompositionLocalProvider(LocalOverscrollFactory provides null) {
+                MaterialTheme(motionScheme = contentMotionScheme) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.headlineSmallEmphasized,
+                            modifier = Modifier.padding(bottom = 20.dp),
+                        )
+                        content(dismiss)
+                    }
+                }
+            }
         }
     }
 }
