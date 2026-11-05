@@ -29,6 +29,7 @@ import com.android.launcher3.model.data.WorkspaceItemInfo
 import com.android.launcher3.util.LauncherBindableItemsContainer.ItemOperator
 import com.android.launcher3.views.ActivityContext
 import com.android.launcher3.widget.PendingAppWidgetHostView
+import com.android.launcher3.widget.WidgetStackView
 import java.util.function.Predicate
 
 /** Interface representing a container which can bind Launcher items with some utility methods */
@@ -60,6 +61,7 @@ fun interface LauncherBindableItemsContainer {
                     v.applyState()
                     v.postProviderAvailabilityCheck()
                 }
+                v is WidgetStackView -> v.updateWidgetStates(updates)
             }
 
             // Iterate all items

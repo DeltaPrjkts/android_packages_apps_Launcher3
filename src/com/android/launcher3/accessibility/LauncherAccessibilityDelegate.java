@@ -49,6 +49,7 @@ import com.android.launcher3.model.data.CollectionInfo;
 import com.android.launcher3.model.data.FolderInfo;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.LauncherAppWidgetInfo;
+import com.android.launcher3.model.data.WidgetStackInfo;
 import com.android.launcher3.model.data.WorkspaceItemFactory;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.popup.ArrowPopup;
@@ -64,6 +65,7 @@ import com.android.launcher3.views.OptionsPopupView;
 import com.android.launcher3.views.OptionsPopupView.OptionItem;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.launcher3.widget.PendingAddWidgetInfo;
+import com.android.launcher3.widget.WidgetStackView;
 import com.android.launcher3.widget.util.WidgetSizeHandler;
 
 import java.util.ArrayList;
@@ -185,6 +187,9 @@ public class LauncherAccessibilityDelegate extends BaseAccessibilityDelegate<Lau
     protected boolean performAction(final View host, final ItemInfo item, int action,
             boolean fromKeyboard) {
         if (action == ACTION_LONG_CLICK) {
+            if (host instanceof WidgetStackView) {
+                return mContext.getPopupControllerForHomeScreenItems().show(host) != null;
+            }
             PreDragCondition dragCondition = null;
             // Long press should be consumed for workspace items, and it should invoke the
             // Shortcuts / Notifications / Actions pop-up menu, and not start a drag as the
@@ -366,7 +371,7 @@ public class LauncherAccessibilityDelegate extends BaseAccessibilityDelegate<Lau
             mDragInfo.dragType = DragType.FOLDER;
         } else if (info instanceof AppPairInfo) {
             mDragInfo.dragType = DragType.APP_PAIR;
-        } else if (info instanceof LauncherAppWidgetInfo) {
+        } else if (info instanceof LauncherAppWidgetInfo || info instanceof WidgetStackInfo) {
             mDragInfo.dragType = DragType.WIDGET;
         }
 
@@ -531,7 +536,9 @@ public class LauncherAccessibilityDelegate extends BaseAccessibilityDelegate<Lau
      * @return true if the item could be successfully added
      */
     public boolean moveToWorkspace(ItemInfo item) {
+        if (!(item instanceof WorkspaceItemInfo)) return false;
         Folder folder = Folder.getOpen(mContext);
+        if (folder == null) return false;
         folder.close(true);
         WorkspaceItemInfo info = (WorkspaceItemInfo) item;
         folder.removeFolderContent(false, info);

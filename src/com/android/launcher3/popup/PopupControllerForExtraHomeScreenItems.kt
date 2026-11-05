@@ -17,9 +17,6 @@
 package com.android.launcher3.popup
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import com.android.launcher3.AbstractFloatingView
@@ -156,18 +153,15 @@ class PopupControllerForExtraHomeScreenItems<T>(
         }
 
         // 3. "App info"
-        if (!targetPackage.isNullOrEmpty()) {
+        if (activeWidgetInfo != null && !targetPackage.isNullOrEmpty()) {
             addShortcutRow(
                 popup = popup,
                 iconResId = R.drawable.ic_info_no_shadow,
                 labelResId = R.string.app_info_drop_target_label,
             ) {
                 AbstractFloatingView.closeAllOpenViews(activityContext)
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", targetPackage, null)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                itemView.context.startActivity(intent)
+                SystemShortcut.APP_INFO.getShortcut(activityContext, activeWidgetInfo, itemView)
+                    ?.onClick(itemView)
             }
         }
 
@@ -179,7 +173,7 @@ class PopupControllerForExtraHomeScreenItems<T>(
         ) {
             AbstractFloatingView.closeAllOpenViews(activityContext)
             if (itemView is WidgetStackView) {
-                itemView.removeCurrentWidget(true)
+                activeWidgetInfo?.let { itemView.removeWidget(it, true) }
             } else {
                 val dropTargetHandler = activityContext.dropTargetHandler
                 dropTargetHandler.prepareToUndoDelete()

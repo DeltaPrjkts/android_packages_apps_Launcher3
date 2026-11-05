@@ -48,6 +48,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 
 import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.PendingAddItemInfo;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.icons.cache.CacheLookupFlag;
@@ -62,6 +63,7 @@ import com.android.launcher3.widget.model.WidgetsListHeaderEntry;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Popup for showing the full list of available widgets with a two-pane layout.
@@ -312,6 +314,16 @@ public class WidgetsTwoPaneSheet extends WidgetsFullSheet {
     }
 
     @Override
+    public void setStackTargetFilter(int spanX, int spanY,
+            Consumer<PendingAddItemInfo> onSelect) {
+        super.setStackTargetFilter(spanX, spanY, onSelect);
+        if (mRightPane != null) mRightPane.removeAllViews();
+        mSelectedHeader = null;
+        resetExpandedHeaders();
+        mAdapters.get(getCurrentAdapterHolderType()).mWidgetsListAdapter.selectFirstHeaderEntry();
+    }
+
+    @Override
     public void onWidgetsListExpandButtonClick(View v) {
         super.onWidgetsListExpandButtonClick(v);
         // Refresh right pane with updated data for the selected header.
@@ -532,6 +544,14 @@ public class WidgetsTwoPaneSheet extends WidgetsFullSheet {
                 if (contentEntry == null || mRightPane == null) {
                     return;
                 }
+
+                List<WidgetsListBaseEntry> filteredEntries =
+                        filterWidgetsForStack(Collections.singletonList(contentEntry));
+                if (filteredEntries.isEmpty()) {
+                    mRightPane.removeAllViews();
+                    return;
+                }
+                contentEntry = (WidgetsListContentEntry) filteredEntries.get(0);
 
                 if (mSuggestedWidgetsHeader != null) {
                     mSuggestedWidgetsHeader.setExpanded(false);

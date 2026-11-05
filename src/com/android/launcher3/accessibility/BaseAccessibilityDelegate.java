@@ -35,6 +35,7 @@ import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.util.Thunk;
 import com.android.launcher3.views.ActivityContext;
 import com.android.launcher3.views.BubbleTextHolder;
+import com.android.launcher3.widget.WidgetStackView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,6 +88,7 @@ public abstract class BaseAccessibilityDelegate<T extends Context & ActivityCont
     protected abstract void getSupportedActions(View host, ItemInfo item, List<LauncherAction> out);
 
     private boolean itemSupportsLongClick(View host) {
+        if (host instanceof WidgetStackView) return true;
         if (host instanceof BubbleTextView) {
             return ((BubbleTextView) host).canShowLongPressPopup();
         } else if (host instanceof BubbleTextHolder) {
@@ -103,7 +105,7 @@ public abstract class BaseAccessibilityDelegate<T extends Context & ActivityCont
             return item.screenId >= 0
                     && item.container != LauncherSettings.Favorites.CONTAINER_HOTSEAT_PREDICTION;
         }
-        return (item instanceof LauncherAppWidgetInfo)
+        return (item instanceof LauncherAppWidgetInfo && item.container < 0)
                 || (item instanceof CollectionInfo);
     }
 

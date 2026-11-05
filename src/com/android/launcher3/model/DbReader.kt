@@ -86,7 +86,7 @@ class DbReader(val mDb: SQLiteDatabase, val mTableName: String, val mContext: Co
                     }
 
                     LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK -> {
-                        val total = getFolderItemsCount(entry)
+                        val total = getWidgetStackItemsCount(entry)
                         if (total == 0) {
                             throw Exception("Widget stack is empty")
                         }
@@ -197,7 +197,7 @@ class DbReader(val mDb: SQLiteDatabase, val mTableName: String, val mContext: Co
                     }
 
                     LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK -> {
-                        check(getFolderItemsCount(entry) > 0) { "Widget stack is empty" }
+                        check(getWidgetStackItemsCount(entry) > 0) { "Widget stack is empty" }
                         entry.minSpanX = entry.spanX
                         entry.minSpanY = entry.spanY
                     }
@@ -217,6 +217,23 @@ class DbReader(val mDb: SQLiteDatabase, val mTableName: String, val mContext: Co
         GridSizeMigrationDBController.removeEntryFromDb(mDb, mTableName, entriesToRemove)
         c.close()
         return workspaceEntries
+    }
+
+    private fun getWidgetStackItemsCount(entry: DbEntry): Int {
+        queryWorkspace(
+            arrayOf(
+                LauncherSettings.Favorites._ID,
+                LauncherSettings.Favorites.APPWIDGET_PROVIDER,
+                LauncherSettings.Favorites.APPWIDGET_ID,
+            ),
+            "${LauncherSettings.Favorites.CONTAINER} = ${entry.id}",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = "${cursor.getString(1)}#${cursor.getInt(2)}"
+                entry.mFolderItems.getOrPut(key) { HashSet() }.add(cursor.getInt(0))
+            }
+        }
+        return entry.mFolderItems.values.sumOf { it.size }
     }
 
     private fun getFolderItemsCount(entry: DbEntry): Int {

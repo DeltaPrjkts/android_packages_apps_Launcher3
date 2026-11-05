@@ -26,6 +26,7 @@ import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.Bundle
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.VelocityTracker
@@ -33,6 +34,8 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import com.android.launcher3.Launcher
@@ -45,6 +48,8 @@ import com.android.launcher3.popup.Poppable
 import com.android.launcher3.popup.PoppableType
 import com.android.launcher3.util.ItemInflater
 import com.android.launcher3.util.MultiTranslateDelegate
+import com.android.launcher3.views.ActivityContext
+import com.android.launcher3.widget.util.WidgetSizeHandler.Companion.updateSizeRanges
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -76,8 +81,24 @@ class WidgetStackView @JvmOverloads constructor(
     private var downY = 0f
     private var isSwiping = false
     private var snapAnimator: ValueAnimator? = null
+    private var itemInflater: ItemInflater<*>? = null
+    private val activityContext: ActivityContext = ActivityContext.lookupContext(context)
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var velocityTracker: VelocityTracker? = null
+
+    private var pageIndicatorAlpha = 1f
+    private var pageIndicatorFadeAnimator: ValueAnimator? = null
+    private val dimPageIndicator = Runnable {
+        pageIndicatorFadeAnimator =
+            ValueAnimator.ofFloat(pageIndicatorAlpha, PAGE_INDICATOR_IDLE_ALPHA).apply {
+                duration = PAGE_INDICATOR_FADE_DURATION_MS
+                addUpdateListener {
+                    pageIndicatorAlpha = it.animatedValue as Float
+                    invalidate()
+                }
+                start()
+            }
+    }
 
     private val translateDelegate = MultiTranslateDelegate(this)
     private var reorderBounceScale = 1f
@@ -101,6 +122,8 @@ class WidgetStackView @JvmOverloads constructor(
 
     init {
         setWillNotDraw(false)
+        isFocusable = true
+        accessibilityDelegate = activityContext.accessibilityDelegate
         clipChildren = true
         val enforcedRadius = RoundedCornerEnforcement.computeEnforcedRadius(context)
         if (enforcedRadius > 0) {
@@ -116,18 +139,20 @@ class WidgetStackView @JvmOverloads constructor(
     fun bindStack(info: WidgetStackInfo, itemInflater: ItemInflater<*>) {
         this.stackInfo?.removeListener(this)
         this.stackInfo = info
-        info.addListener(this)
+        this.itemInflater = itemInflater
 
         removeAllViews()
         childViews.clear()
 
-        val widgets = info.getWidgets()
+        val widgets = info.getWidgets().toList()
         for (wInfo in widgets) {
             val hostView = itemInflater.inflateAppWidgetView(wInfo)
             if (hostView != null) {
                 childViews.add(hostView)
                 addView(hostView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
                 attachChildLongClickListener(hostView)
+            } else {
+                info.removeWidget(wInfo)
             }
         }
 
@@ -140,8 +165,10 @@ class WidgetStackView @JvmOverloads constructor(
         if (childViews.isEmpty()) {
             visibility = GONE
             post {
-                val launcher = Launcher.getLauncher(context)
-                launcher.removeItem(this, info, true, "Empty widget stack removed")
+                if (stackInfo === info && childViews.isEmpty()) {
+                    (activityContext as? Launcher)?.removeItem(
+                        this, info, true, "Empty widget stack removed")
+                }
             }
         }
     }
@@ -154,34 +181,49 @@ class WidgetStackView @JvmOverloads constructor(
     }
 
     fun getActiveWidgetInfo(): LauncherAppWidgetInfo? {
-        val widgets = stackInfo?.getWidgets() ?: return null
-        if (widgets.isEmpty()) return null
-        val idx = max(0, min(currentPage, widgets.size - 1))
-        return widgets.getOrNull(idx)
+        return getActiveWidgetView()?.tag as? LauncherAppWidgetInfo
     }
 
     fun getActiveWidgetView(): View? = childViews.getOrNull(currentPage)
 
     fun addWidgetView(info: LauncherAppWidgetInfo, view: View) {
         val stack = stackInfo ?: return
+        if (!WidgetStackInfo.hasMatchingSize(info, stack.spanX, stack.spanY)) return
         if (!stack.getWidgets().contains(info)) {
+            if (!stack.canAdd(info)) return
             stack.add(info)
         }
-        if (!childViews.contains(view)) {
-            childViews.add(view)
-            addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-            attachChildLongClickListener(view)
+        val previousView = childViews.firstOrNull { it.tag == info }
+        if (previousView == view) return
+        val replacing = previousView != null
+        previousView?.let {
+            removeView(it)
+            childViews.remove(it)
         }
-        snapToPage(childViews.size - 1, true)
+        (view.parent as? ViewGroup)?.removeView(view)
+        val index = stack.getWidgets().indexOf(info).coerceAtMost(childViews.size)
+        childViews.add(index, view)
+        addView(view, index, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        attachChildLongClickListener(view)
+        if (view is LauncherAppWidgetHostView) {
+            view.updateSizeRanges(info.spanX, info.spanY)
+        }
+        visibility = VISIBLE
+        snapToPage(if (replacing) currentPage else index, !replacing)
     }
 
     fun removeCurrentWidget(deleteFromDb: Boolean) {
-        val stack = stackInfo ?: return
-        val currentInfo = getActiveWidgetInfo() ?: return
-        val currentView = getActiveWidgetView()
-        val launcher = Launcher.getLauncher(context)
+        getActiveWidgetInfo()?.let { removeWidget(it, deleteFromDb) }
+    }
 
-        if (childViews.size <= 1) {
+    fun removeWidget(info: LauncherAppWidgetInfo, deleteFromDb: Boolean) {
+        val stack = stackInfo ?: return
+        if (!stack.getWidgets().contains(info)) return
+        val currentView = childViews.firstOrNull { it.tag == info }
+        val launcher = activityContext as? Launcher ?: return
+        snapAnimator?.cancel()
+
+        if (stack.getWidgets().size <= 1) {
             // Removing the last widget removes the entire stack
             launcher.removeItem(this, stack, deleteFromDb, "User removed last widget from stack")
             return
@@ -192,18 +234,19 @@ class WidgetStackView @JvmOverloads constructor(
             removeView(currentView)
             childViews.remove(currentView)
         }
-        stack.removeWidget(currentInfo)
+        stack.removeWidget(info)
 
         if (deleteFromDb) {
             launcher.modelWriter.deleteWidgetInfo(
-                currentInfo,
+                info,
                 launcher.appWidgetHolder,
                 "User removed widget from stack"
             )
+            stack.getWidgets().forEach { launcher.modelWriter.updateItemInDatabase(it) }
+            launcher.modelWriter.updateItemInDatabase(stack)
         }
 
-        currentPage = max(0, min(currentPage, childViews.size - 1))
-        stack.currentIndex = currentPage
+        currentPage = stack.currentIndex
         val w = width.toFloat()
         currentScrollX = if (w > 0f) currentPage * w else 0f
         snapToPage(currentPage, false)
@@ -229,8 +272,105 @@ class WidgetStackView @JvmOverloads constructor(
     }
 
     override fun onCurrentIndexChanged(index: Int) {
+        val launcher = activityContext as? Launcher
+        stackInfo?.let { launcher?.modelWriter?.updateItemInDatabase(it) }
         if (index != currentPage && index in 0 until childViews.size) {
             snapToPage(index, true)
+        }
+        sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SCROLLED)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        val holder = activityContext.appWidgetHolder
+        if (holder != null) {
+            childViews.toList().forEach { child ->
+                val info = child.tag as? LauncherAppWidgetInfo ?: return@forEach
+                if (child is LauncherAppWidgetHostView && !info.isCustomWidget) {
+                    val attached = holder.attachViewToHostAndGetAttachedView(child)
+                    itemInflater?.prepareAppWidget(attached, info)
+                    if (attached !== child) addWidgetView(info, attached)
+                }
+            }
+        }
+        updateWidgetSizes()
+        stackInfo?.addListener(this)
+        showPageIndicator()
+        schedulePageIndicatorDim()
+    }
+
+    fun updateWidgetSizes() {
+        childViews.forEach { child ->
+            val info = child.tag as? LauncherAppWidgetInfo ?: return@forEach
+            if (child is LauncherAppWidgetHostView) {
+                child.updateSizeRanges(info.spanX, info.spanY)
+            }
+        }
+    }
+
+    fun updateWidgetStates(updates: Set<ItemInfo>) {
+        childViews.toList().forEach { child ->
+            if (child is PendingAppWidgetHostView && child.tag in updates) {
+                child.applyState()
+                child.postProviderAvailabilityCheck()
+            }
+        }
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.isScrollable = childViews.size > 1
+        if (currentPage > 0) {
+            info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
+        }
+        if (currentPage < childViews.lastIndex) {
+            info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
+        }
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
+        val targetPage = when (action) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> currentPage + 1
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> currentPage - 1
+            else -> return super.performAccessibilityAction(action, arguments)
+        }
+        if (targetPage !in childViews.indices) return false
+        snapToPage(targetPage, true)
+        return true
+    }
+
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        if (childViews.size > 1) {
+            parent?.requestDisallowInterceptTouchEvent(disallowIntercept || isSwiping)
+        } else {
+            super.requestDisallowInterceptTouchEvent(disallowIntercept)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        snapAnimator?.cancel()
+        removeCallbacks(dimPageIndicator)
+        pageIndicatorFadeAnimator?.cancel()
+        pageIndicatorFadeAnimator = null
+        velocityTracker?.recycle()
+        velocityTracker = null
+        isSwiping = false
+        stackInfo?.removeListener(this)
+        super.onDetachedFromWindow()
+    }
+
+    private fun showPageIndicator() {
+        removeCallbacks(dimPageIndicator)
+        pageIndicatorFadeAnimator?.cancel()
+        pageIndicatorFadeAnimator = null
+        pageIndicatorAlpha = 1f
+        invalidate()
+    }
+
+    private fun schedulePageIndicatorDim() {
+        removeCallbacks(dimPageIndicator)
+        if (isAttachedToWindow) {
+            postDelayed(dimPageIndicator, PAGE_INDICATOR_DIM_DELAY_MS)
         }
     }
 
@@ -291,12 +431,15 @@ class WidgetStackView @JvmOverloads constructor(
 
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                showPageIndicator()
                 downX = ev.x
                 downY = ev.y
                 lastTouchX = ev.x
                 val wasAnimating = snapAnimator?.isRunning == true
                 snapAnimator?.cancel()
                 isSwiping = wasAnimating
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain().apply { addMovement(ev) }
                 // Disallow workspace page scrolling while touching down on stack
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
@@ -316,6 +459,13 @@ class WidgetStackView @JvmOverloads constructor(
         }
 
         val handled = super.dispatchTouchEvent(ev)
+        if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+            velocityTracker?.recycle()
+            velocityTracker = null
+            if (snapAnimator?.isRunning != true) {
+                schedulePageIndicatorDim()
+            }
+        }
         // If child widget didn't consume ACTION_DOWN, consume it so we continue to receive MOVE events
         if (ev.actionMasked == MotionEvent.ACTION_DOWN && !handled) {
             return true
@@ -333,11 +483,6 @@ class WidgetStackView @JvmOverloads constructor(
                 downX = ev.x
                 downY = ev.y
                 lastTouchX = ev.x
-                val wasAnimating = snapAnimator?.isRunning == true
-                snapAnimator?.cancel()
-                isSwiping = wasAnimating
-                velocityTracker?.recycle()
-                velocityTracker = VelocityTracker.obtain().apply { addMovement(ev) }
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - downX
@@ -419,6 +564,7 @@ class WidgetStackView @JvmOverloads constructor(
 
                     val deltaProgress = progress - currentPage
                     val targetPage = when {
+                        ev.actionMasked == MotionEvent.ACTION_CANCEL -> currentPage
                         vx < -500f -> currentPage + 1
                         vx > 500f -> currentPage - 1
                         deltaProgress > 0.20f -> currentPage + kotlin.math.ceil(deltaProgress).toInt()
@@ -442,6 +588,7 @@ class WidgetStackView @JvmOverloads constructor(
 
     fun snapToPage(targetPage: Int, animated: Boolean = true, velocity: Float = 0f) {
         snapAnimator?.cancel()
+        showPageIndicator()
         val clampedPage = targetPage.coerceIn(0, max(0, childViews.size - 1))
         val w = width.toFloat()
 
@@ -451,6 +598,7 @@ class WidgetStackView @JvmOverloads constructor(
             stackInfo?.currentIndex = currentPage
             updateViewsForScroll(currentScrollX)
             invalidate()
+            schedulePageIndicatorDim()
             return
         }
 
@@ -464,6 +612,7 @@ class WidgetStackView @JvmOverloads constructor(
             stackInfo?.currentIndex = currentPage
             updateViewsForScroll(currentScrollX)
             invalidate()
+            schedulePageIndicatorDim()
             return
         }
 
@@ -498,6 +647,7 @@ class WidgetStackView @JvmOverloads constructor(
                         currentScrollX = targetScrollX
                         updateViewsForScroll(currentScrollX)
                         invalidate()
+                        schedulePageIndicatorDim()
                     }
                 }
             })
@@ -535,6 +685,7 @@ class WidgetStackView @JvmOverloads constructor(
             trackStartX + totalTrackWidth + dotRadius + bgHPad,
             centerY + dotRadius + bgVPad
         )
+        val indicatorLayer = canvas.saveLayerAlpha(bgRect, (pageIndicatorAlpha * 255).toInt())
         canvas.drawRoundRect(bgRect, dotRadius + bgVPad, dotRadius + bgVPad, dotsBgPaint)
 
         // 2. Draw inactive dots
@@ -553,6 +704,7 @@ class WidgetStackView @JvmOverloads constructor(
             centerY + dotRadius
         )
         canvas.drawRoundRect(activeRect, dotRadius, dotRadius, activeDotPaint)
+        canvas.restoreToCount(indicatorLayer)
     }
 
     override fun getWorkspaceVisualDragBounds(bounds: Rect) {
@@ -574,6 +726,10 @@ class WidgetStackView @JvmOverloads constructor(
     override fun getPoppableType(): PoppableType = PoppableType.WIDGET
 
     companion object {
+        private const val PAGE_INDICATOR_IDLE_ALPHA = 0.3f
+        private const val PAGE_INDICATOR_DIM_DELAY_MS = 2_000L
+        private const val PAGE_INDICATOR_FADE_DURATION_MS = 200L
+
         @JvmStatic
         fun inflate(
             context: Context,

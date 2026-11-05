@@ -24,6 +24,7 @@ import com.android.launcher3.Launcher
 import com.android.launcher3.LauncherState
 import com.android.launcher3.PagedView
 import com.android.launcher3.Workspace
+import com.android.launcher3.model.data.ItemInfo
 import com.android.launcher3.model.data.LauncherAppWidgetInfo
 import com.android.launcher3.statemanager.StateManager
 import com.android.launcher3.views.ActivityContext
@@ -66,7 +67,8 @@ class WidgetVisibilityTracker(
         val visiblePages = workspace.visiblePageIndices
         widgetHolder.views.forEach { _, view ->
             val pageIndex =
-                (view.tag as? LauncherAppWidgetInfo)?.screenId?.let {
+                ((view.parent as? WidgetStackView)?.tag as? ItemInfo
+                    ?: view.tag as? LauncherAppWidgetInfo)?.screenId?.let {
                     workspace.getPageIndexForScreenId(it)
                 } ?: return@forEach
             if (inNormalState && noFloatingViews && pageIndex in visiblePages) {

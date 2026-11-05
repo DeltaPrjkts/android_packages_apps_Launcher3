@@ -18,6 +18,7 @@ package com.android.launcher3.model.data
 
 import com.android.launcher3.LauncherSettings
 import com.android.launcher3.util.ContentWriter
+import java.util.Collections
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.max
 import kotlin.math.min
@@ -33,7 +34,8 @@ class WidgetStackInfo() : CollectionInfo() {
 
     var currentIndex: Int = 0
         set(value) {
-            val clamped = if (widgets.isEmpty()) 0 else max(0, min(value, widgets.size - 1))
+            val clamped =
+                value.coerceIn(0, if (widgets.isEmpty()) MAX_STACK_SIZE - 1 else widgets.lastIndex)
             if (field != clamped) {
                 field = clamped
                 listeners.forEach { it.onCurrentIndexChanged(clamped) }
@@ -45,20 +47,28 @@ class WidgetStackInfo() : CollectionInfo() {
     }
 
     constructor(initialWidgets: List<LauncherAppWidgetInfo>) : this() {
+        initialWidgets.firstOrNull()?.let {
+            spanX = it.spanX
+            spanY = it.spanY
+            minSpanX = spanX
+            minSpanY = spanY
+        }
         initialWidgets.forEach(this::add)
     }
 
     constructor(widgetStackInfo: WidgetStackInfo) : this() {
         copyFrom(widgetStackInfo)
-        currentIndex = widgetStackInfo.currentIndex
         widgetStackInfo.widgets.forEach { widgets.add(it) }
+        currentIndex = widgetStackInfo.currentIndex
     }
 
+    fun canAdd(item: ItemInfo): Boolean =
+        widgets.size < MAX_STACK_SIZE &&
+            widgets.none { it === item } &&
+            hasMatchingSize(item, spanX, spanY)
+
     override fun add(item: ItemInfo) {
-        if (item !is LauncherAppWidgetInfo) {
-            return
-        }
-        if (widgets.size >= MAX_STACK_SIZE) {
+        if (item !is LauncherAppWidgetInfo || !canAdd(item)) {
             return
         }
         if (!widgets.contains(item)) {
@@ -70,17 +80,19 @@ class WidgetStackInfo() : CollectionInfo() {
     }
 
     fun removeWidget(item: LauncherAppWidgetInfo) {
+        val activeWidget = getActiveWidget()
         if (widgets.remove(item)) {
+            widgets.forEachIndexed { rank, widget -> widget.rank = rank }
+            currentIndex =
+                activeWidget?.let(widgets::indexOf)?.takeIf { it >= 0 }
+                    ?: currentIndex.coerceAtMost(max(0, widgets.lastIndex))
             listeners.forEach { it.onWidgetRemoved(item) }
-            if (currentIndex >= widgets.size) {
-                currentIndex = max(0, widgets.size - 1)
-            }
         }
     }
 
-    fun getWidgets(): List<LauncherAppWidgetInfo> = widgets
+    fun getWidgets(): List<LauncherAppWidgetInfo> = Collections.unmodifiableList(widgets)
 
-    override fun getContents(): List<ItemInfo> = widgets
+    override fun getContents(): List<ItemInfo> = getWidgets()
 
     override fun getAppContents(): List<WorkspaceItemInfo> = emptyList()
 
@@ -113,5 +125,11 @@ class WidgetStackInfo() : CollectionInfo() {
 
     companion object {
         const val MAX_STACK_SIZE = 4
+
+        @JvmStatic
+        fun hasMatchingSize(item: ItemInfo, spanX: Int, spanY: Int): Boolean =
+            (item.itemType == LauncherSettings.Favorites.ITEM_TYPE_APPWIDGET ||
+                item.itemType == LauncherSettings.Favorites.ITEM_TYPE_CUSTOM_APPWIDGET) &&
+                spanX > 0 && spanY > 0 && item.spanX == spanX && item.spanY == spanY
     }
 }

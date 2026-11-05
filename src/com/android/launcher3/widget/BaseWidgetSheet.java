@@ -195,12 +195,17 @@ public abstract class BaseWidgetSheet extends AbstractSlideInView<BaseActivity>
         mStackSelectCallback = callback;
     }
 
+    protected boolean canSelectWidgetForStack(PendingAddItemInfo info) {
+        return true;
+    }
+
     /**
      * Click handler for tap to add button. This handler assumes we are in the Launcher activity and
      * should not be used when the widget sheet is displayed elsewhere.
      */
     private void addWidget(@NonNull PendingAddItemInfo info) {
         if (mStackSelectCallback != null) {
+            if (!canSelectWidgetForStack(info)) return;
             final Consumer<PendingAddItemInfo> callback = mStackSelectCallback;
             mStackSelectCallback = null;
             final AtomicBoolean hasRun = new AtomicBoolean(false);
@@ -298,6 +303,15 @@ public abstract class BaseWidgetSheet extends AbstractSlideInView<BaseActivity>
     public boolean onLongClick(View v) {
         TestLogging.recordEvent(TestProtocol.SEQUENCE_MAIN, "Widgets.onLongClick");
         v.cancelLongPress();
+
+        if (mStackSelectCallback != null) {
+            Object cell = v instanceof WidgetCell ? v : v.getParent();
+            if (cell instanceof WidgetCell widgetCell
+                    && widgetCell.getTag() instanceof PendingAddItemInfo info) {
+                addWidget(info);
+            }
+            return true;
+        }
 
         boolean result;
         if (v instanceof WidgetCell) {
