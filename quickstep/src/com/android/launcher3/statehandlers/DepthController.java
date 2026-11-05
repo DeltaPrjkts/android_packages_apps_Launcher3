@@ -162,6 +162,7 @@ public class DepthController extends BaseDepthController implements StateHandler
         if (isStarted) {
             ensureDependencies();
             addOnDrawListener();
+            pauseBlursOnWindows(false);
         } else {
             removeOnDrawListener();
             setBaseSurface(null);

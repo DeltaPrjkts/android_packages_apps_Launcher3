@@ -107,6 +107,7 @@ public class SettingsHomescreen extends ComposeSettingsActivity
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         if (LauncherPrefs.COS_APP_ANIMATIONS.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.SHOW_HOTSEAT_BG.getSharedPrefKey().equals(key) ||
+                LauncherPrefs.HOTSEAT_BLUR.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.HOTSEAT_OPACITY.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_SEARCH.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey().equals(key) ||

@@ -217,6 +217,13 @@ public class BaseDepthController {
         }
         mPauseBlurs = pause;
         applyDepthAndBlur();
+        if (mLauncher != null && mLauncher.getHotseat() != null) {
+            mLauncher.getHotseat().postInvalidate();
+        }
+    }
+
+    public boolean isBlursPaused() {
+        return mPauseBlurs;
     }
 
     public void setAppAnimationBlur(float radius) {

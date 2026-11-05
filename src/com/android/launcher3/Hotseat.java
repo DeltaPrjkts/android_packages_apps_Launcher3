@@ -25,8 +25,13 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
+import android.view.CrossWindowBlurListeners;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -37,12 +42,16 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.launcher3.ShortcutAndWidgetContainer.TranslationProvider;
 import com.android.launcher3.celllayout.CellLayoutLayoutParams;
 import com.android.launcher3.LauncherPrefs;
+import com.android.launcher3.LauncherPrefChangeListener;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.qsb.DockSearchWidgetHelper;
+import com.android.launcher3.statemanager.StateManager.StateListener;
 import com.android.launcher3.util.HorizontalInsettableView;
 import com.android.launcher3.util.LauncherBindableItemsContainer.ItemOperator;
 import com.android.launcher3.util.MultiPropertyFactory;
@@ -54,6 +63,7 @@ import com.android.launcher3.views.ActivityContext;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.function.Consumer;
 
 /**
  * View class that represents the bottom row of the home screen.
@@ -99,6 +109,33 @@ public class Hotseat extends CellLayout implements Insettable {
 
     private View mQsb;
 
+    private BackgroundBlurDrawable mBackgroundBlurDrawable;
+    private GradientDrawable mBackgroundTintDrawable;
+    private final Rect mPillRect = new Rect();
+    private final Rect mLastBlurBounds = new Rect();
+    private float mLastCornerRadius = -1f;
+    private int mLastBlurRadius = -1;
+    private final Rect mTempCellRect1 = new Rect();
+    private final Rect mTempCellRect2 = new Rect();
+    private boolean mShowHotseatBg;
+    private boolean mHotseatBlur;
+    private int mBlurDepth;
+    private int mOpacity;
+    private boolean mCrossWindowBlurEnabled;
+    private final Consumer<Boolean> mCrossWindowBlurListener = this::onCrossWindowBlurEnabledChanged;
+    private final LauncherPrefChangeListener mPrefChangeListener = key -> updateBackgroundPreferences();
+    private final StateListener<LauncherState> mStateListener = new StateListener<>() {
+        @Override
+        public void onStateTransitionStart(LauncherState toState) {
+            invalidate();
+        }
+
+        @Override
+        public void onStateTransitionComplete(LauncherState finalState) {
+            invalidate();
+        }
+    };
+
     public Hotseat(Context context) {
         this(context, null);
     }
@@ -112,11 +149,18 @@ public class Hotseat extends CellLayout implements Insettable {
         mQsb = createQsbView(context);
         addView(mQsb);
         mIconsAlphaChannels = new MultiValueAlpha(getShortcutsAndWidgets(),
-                ALPHA_CHANNEL_CHANNELS_COUNT);
+                ALPHA_CHANNEL_CHANNELS_COUNT) {
+            @Override
+            protected void apply(float value) {
+                super.apply(value);
+                invalidate();
+            }
+        };
         mIconsAlphaChannels.setUpdateVisibility(true);
         updateQsbAnimationChannels();
         mIconsTranslationXFactory = new MultiPropertyFactory<>(getShortcutsAndWidgets(),
                 VIEW_TRANSLATE_X, ICONS_TRANSLATION_X_CHANNELS_COUNT, Float::sum);
+        updateBackgroundPreferences();
     }
 
     private View createQsbView(Context context) {
@@ -385,6 +429,258 @@ public class Hotseat extends CellLayout implements Insettable {
             top = bottom - dp.getHotseatProfile().getQsbHeight();
         }
         mQsb.layout(left, top, right, bottom);
+        if (mShowHotseatBg) {
+            invalidate();
+        }
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+        CrossWindowBlurListeners.getInstance().addListener(
+                getContext().getMainExecutor(), mCrossWindowBlurListener);
+        LauncherPrefs.get(getContext()).addListener(mPrefChangeListener,
+                LauncherPrefs.SHOW_HOTSEAT_BG,
+                LauncherPrefs.HOTSEAT_BLUR,
+                LauncherPrefs.BLUR_DEPTH,
+                LauncherPrefs.HOTSEAT_OPACITY);
+        Launcher launcher = mActivity instanceof Launcher l ? l : null;
+        if (launcher != null && launcher.getStateManager() != null) {
+            launcher.getStateManager().addStateListener(mStateListener);
+        }
+        updateBackgroundPreferences();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mBackgroundBlurDrawable != null) {
+            mBackgroundBlurDrawable.setVisible(false, false);
+            mBackgroundBlurDrawable.setCallback(null);
+            mBackgroundBlurDrawable = null;
+        }
+        mLastBlurBounds.setEmpty();
+        mLastCornerRadius = -1f;
+        mLastBlurRadius = -1;
+        Launcher launcher = mActivity instanceof Launcher l ? l : null;
+        if (launcher != null && launcher.getStateManager() != null) {
+            launcher.getStateManager().removeStateListener(mStateListener);
+        }
+        CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
+        LauncherPrefs.get(getContext()).removeListener(mPrefChangeListener,
+                LauncherPrefs.SHOW_HOTSEAT_BG,
+                LauncherPrefs.HOTSEAT_BLUR,
+                LauncherPrefs.BLUR_DEPTH,
+                LauncherPrefs.HOTSEAT_OPACITY);
+    }
+
+    @Override
+    public void setAlpha(float alpha) {
+        float oldAlpha = getAlpha();
+        super.setAlpha(alpha);
+        if (mShowHotseatBg && (alpha >= 0.99f || alpha <= 0.01f || (oldAlpha <= 0.01f && alpha > 0.01f))) {
+            invalidate();
+        }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == VISIBLE) {
+            updateBackgroundPreferences();
+            postInvalidate();
+        }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (isVisible) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) {
+            postInvalidate();
+        }
+    }
+
+    private void onCrossWindowBlurEnabledChanged(boolean enabled) {
+        mCrossWindowBlurEnabled = enabled;
+        if (!enabled && mBackgroundBlurDrawable != null) {
+            mBackgroundBlurDrawable.setVisible(false, false);
+        }
+        invalidate();
+    }
+
+    private void updateBackgroundPreferences() {
+        Context context = getContext();
+        mShowHotseatBg = LauncherPrefs.SHOW_HOTSEAT_BG.get(context);
+        mHotseatBlur = LauncherPrefs.HOTSEAT_BLUR.get(context);
+        mBlurDepth = LauncherPrefs.BLUR_DEPTH.get(context);
+        mOpacity = LauncherPrefs.HOTSEAT_OPACITY.get(context);
+        invalidate();
+    }
+
+    @Override
+    protected boolean verifyDrawable(Drawable who) {
+        return super.verifyDrawable(who)
+                || (who == mBackgroundBlurDrawable)
+                || (who == mBackgroundTintDrawable);
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        drawHotseatBackground(canvas);
+        super.dispatchDraw(canvas);
+    }
+
+    private void drawHotseatBackground(Canvas canvas) {
+        if (!mShowHotseatBg || getVisibility() != VISIBLE || !isAttachedToWindow()) {
+            if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
+                mBackgroundBlurDrawable.setVisible(false, false);
+            }
+            return;
+        }
+
+        float iconAlpha = mShortcutsAndWidgets != null ? mShortcutsAndWidgets.getAlpha() : 1f;
+        if (iconAlpha <= 0.001f) {
+            if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
+                mBackgroundBlurDrawable.setVisible(false, false);
+            }
+            return;
+        }
+
+        DeviceProfile dp = mActivity.getDeviceProfile();
+        int iconSize = dp.getWorkspaceIconProfile().getIconSizePx();
+
+        int childWidthSize = getWidth() - (getPaddingLeft() + getPaddingRight());
+        int childHeightSize = getHeight() - (getPaddingTop() + getPaddingBottom());
+        if (childWidthSize <= 0) childWidthSize = dp.getCellLayoutWidth();
+        if (childHeightSize <= 0) childHeightSize = dp.hotseatBarSizePx;
+
+        int count = mHasVerticalHotseat
+                ? (mCountY > 0 ? mCountY : dp.numShownHotseatIcons)
+                : (mCountX > 0 ? mCountX : dp.numShownHotseatIcons);
+        if (count <= 0) count = 4;
+
+        int borderSpaceX = mBorderSpace != null ? mBorderSpace.x : dp.hotseatBorderSpace;
+        int borderSpaceY = mBorderSpace != null ? mBorderSpace.y : dp.hotseatBorderSpace;
+
+        int cellWidth = mCellWidth > 0 ? mCellWidth
+                : DeviceProfile.calculateCellWidth(childWidthSize, borderSpaceX, count);
+        int cellHeight = mCellHeight > 0 ? mCellHeight
+                : DeviceProfile.calculateCellHeight(childHeightSize, borderSpaceY, mHasVerticalHotseat ? count : 1);
+
+        float containerTx = mShortcutsAndWidgets != null ? mShortcutsAndWidgets.getTranslationX() : 0f;
+        float containerTy = mShortcutsAndWidgets != null ? mShortcutsAndWidgets.getTranslationY() : 0f;
+
+        int padHorizontal = Utilities.dpToPx(14f);
+        int padVertical = Utilities.dpToPx(10f);
+
+        float cornerRadius;
+        if (mHasVerticalHotseat) {
+            getHotseatCellRect(0, 0, cellWidth, cellHeight, borderSpaceX, borderSpaceY, count, mTempCellRect1);
+            getHotseatCellRect(0, count - 1, cellWidth, cellHeight, borderSpaceX, borderSpaceY, count, mTempCellRect2);
+
+            float iconLeft = mTempCellRect1.centerX() - iconSize / 2f + containerTx;
+            float iconRight = iconLeft + iconSize;
+            float iconTop = Math.min(mTempCellRect1.centerY(), mTempCellRect2.centerY()) - iconSize / 2f + containerTy;
+            float iconBottom = Math.max(mTempCellRect1.centerY(), mTempCellRect2.centerY()) + iconSize / 2f + containerTy;
+
+            mPillRect.left = Math.round(iconLeft - padVertical);
+            mPillRect.right = Math.round(iconRight + padVertical);
+            mPillRect.top = Math.round(iconTop - padHorizontal);
+            mPillRect.bottom = Math.round(iconBottom + padHorizontal);
+
+            cornerRadius = mPillRect.width() / 2f;
+        } else {
+            getHotseatCellRect(0, 0, cellWidth, cellHeight, borderSpaceX, borderSpaceY, count, mTempCellRect1);
+            getHotseatCellRect(count - 1, 0, cellWidth, cellHeight, borderSpaceX, borderSpaceY, count, mTempCellRect2);
+
+            float iconLeft = Math.min(mTempCellRect1.centerX(), mTempCellRect2.centerX()) - iconSize / 2f + containerTx;
+            float iconRight = Math.max(mTempCellRect1.centerX(), mTempCellRect2.centerX()) + iconSize / 2f + containerTx;
+            float iconTop = mTempCellRect1.centerY() - iconSize / 2f + containerTy;
+            float iconBottom = iconTop + iconSize;
+
+            mPillRect.left = Math.round(iconLeft - padHorizontal);
+            mPillRect.right = Math.round(iconRight + padHorizontal);
+            mPillRect.top = Math.round(iconTop - padVertical);
+            mPillRect.bottom = Math.round(iconBottom + padVertical);
+
+            cornerRadius = mPillRect.height() / 2f;
+        }
+
+        boolean canBlur = mHotseatBlur && mCrossWindowBlurEnabled && mBlurDepth > 0;
+
+        if (canBlur) {
+            if (mBackgroundBlurDrawable == null && getViewRootImpl() != null) {
+                mBackgroundBlurDrawable = getViewRootImpl().createBackgroundBlurDrawable();
+                if (mBackgroundBlurDrawable != null) {
+                    mBackgroundBlurDrawable.setCallback(this);
+                    mBackgroundBlurDrawable.setApplyRenderNodeAlpha(true);
+                }
+            }
+            if (mBackgroundBlurDrawable != null) {
+                if (!mLastBlurBounds.equals(mPillRect)) {
+                    mBackgroundBlurDrawable.setBounds(mPillRect);
+                    mLastBlurBounds.set(mPillRect);
+                }
+                if (mLastCornerRadius != cornerRadius) {
+                    mBackgroundBlurDrawable.setCornerRadius(cornerRadius);
+                    mLastCornerRadius = cornerRadius;
+                }
+                if (mLastBlurRadius != mBlurDepth) {
+                    mBackgroundBlurDrawable.setBlurRadius(mBlurDepth);
+                    mLastBlurRadius = mBlurDepth;
+                }
+                if (!mBackgroundBlurDrawable.isVisible()) {
+                    mBackgroundBlurDrawable.setVisible(true, false);
+                }
+                mBackgroundBlurDrawable.draw(canvas);
+            }
+        } else {
+            if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
+                mBackgroundBlurDrawable.setVisible(false, false);
+                mLastBlurBounds.setEmpty();
+            }
+        }
+
+        if (mBackgroundTintDrawable == null) {
+            mBackgroundTintDrawable = new GradientDrawable();
+            mBackgroundTintDrawable.setShape(GradientDrawable.RECTANGLE);
+            mBackgroundTintDrawable.setCallback(this);
+        }
+        mBackgroundTintDrawable.setCornerRadius(cornerRadius);
+        mBackgroundTintDrawable.setBounds(mPillRect);
+
+        int baseColor = getContext().getColor(R.color.appseat_color);
+        int targetAlpha = Math.round(255f * (mOpacity / 100f) * iconAlpha);
+        mBackgroundTintDrawable.setColor(ColorUtils.setAlphaComponent(baseColor, targetAlpha));
+
+        int strokeWidth = Math.max(1, Utilities.dpToPx(1f));
+        int strokeAlpha = Math.round(35f * iconAlpha);
+        mBackgroundTintDrawable.setStroke(strokeWidth, Color.argb(strokeAlpha, 255, 255, 255));
+
+        mBackgroundTintDrawable.draw(canvas);
+    }
+
+    private void getHotseatCellRect(int cellX, int cellY, int cellWidth, int cellHeight,
+            int borderSpaceX, int borderSpaceY, int count, Rect resultRect) {
+        int unusedSpace = getWidth() - getPaddingLeft() - getPaddingRight()
+                - (count * cellWidth) - ((count - 1) * borderSpaceX);
+        int hStartPadding = getPaddingLeft() + (int) Math.ceil(Math.max(0, unusedSpace) / 2f);
+        int vStartPadding = getPaddingTop();
+
+        int x = hStartPadding + (cellX * borderSpaceX) + (cellX * cellWidth)
+                + getTranslationXForCell(cellX, cellY);
+        int y = vStartPadding + (cellY * borderSpaceY) + (cellY * cellHeight);
+
+        resultRect.set(x, y, x + cellWidth, y + cellHeight);
     }
 
     /**
@@ -392,6 +688,7 @@ public class Hotseat extends CellLayout implements Insettable {
      */
     public void setIconsAlpha(float alpha, @HotseatQsbAlphaId int channelId) {
         getIconsAlpha(channelId).setValue(alpha);
+        invalidate();
     }
 
     /**

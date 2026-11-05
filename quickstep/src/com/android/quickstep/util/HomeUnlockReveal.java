@@ -139,6 +139,9 @@ public final class HomeUnlockReveal implements ViewTreeObserver.OnPreDrawListene
         }
         mClipping.clear();
         mUnlockAmount = 1f;
+        if (mLauncher != null && mLauncher.getHotseat() != null) {
+            mLauncher.getHotseat().postInvalidate();
+        }
     }
 
     private static final class ViewState {

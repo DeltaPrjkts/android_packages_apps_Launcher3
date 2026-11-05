@@ -179,6 +179,9 @@ public final class HomeUnlockRevealController
             mWorkspaceAnimation.reset();
         }
         mPrepared = false;
+        if (mLauncher != null && mLauncher.getHotseat() != null) {
+            mLauncher.getHotseat().postInvalidate();
+        }
     }
 
     public void destroy() {
