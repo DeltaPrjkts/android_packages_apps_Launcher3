@@ -101,6 +101,7 @@ class WidgetStackView @JvmOverloads constructor(
     }
 
     private val translateDelegate = MultiTranslateDelegate(this)
+    private var scaleToFit = 1f
     private var reorderBounceScale = 1f
 
     // Paints for page indicator dots
@@ -150,7 +151,7 @@ class WidgetStackView @JvmOverloads constructor(
             if (hostView != null) {
                 childViews.add(hostView)
                 addView(hostView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-                attachChildLongClickListener(hostView)
+                prepareChildView(hostView)
             } else {
                 info.removeWidget(wInfo)
             }
@@ -173,7 +174,19 @@ class WidgetStackView @JvmOverloads constructor(
         }
     }
 
-    private fun attachChildLongClickListener(child: View) {
+    private fun prepareChildView(child: View) {
+        child.animate().cancel()
+        if (child is NavigableAppWidgetHostView) {
+            child.setScaleToFit(1f)
+            child.reorderBounceScale = 1f
+            for (index in 0 until MultiTranslateDelegate.COUNT) {
+                child.translateDelegate.setTranslation(index, 0f, 0f)
+            }
+        }
+        child.translationX = 0f
+        child.translationY = 0f
+        child.scaleX = 1f
+        child.scaleY = 1f
         child.setOnLongClickListener {
             // Forward long clicks to the stack view so Launcher popup menu triggers
             performLongClick()
@@ -204,7 +217,7 @@ class WidgetStackView @JvmOverloads constructor(
         val index = stack.getWidgets().indexOf(info).coerceAtMost(childViews.size)
         childViews.add(index, view)
         addView(view, index, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        attachChildLongClickListener(view)
+        prepareChildView(view)
         if (view is LauncherAppWidgetHostView) {
             view.updateSizeRanges(info.spanX, info.spanY)
         }
@@ -708,7 +721,7 @@ class WidgetStackView @JvmOverloads constructor(
     }
 
     override fun getWorkspaceVisualDragBounds(bounds: Rect) {
-        bounds.set(0, 0, width, height)
+        bounds.set(0, 0, (measuredWidth * scaleToFit).toInt(), (measuredHeight * scaleToFit).toInt())
     }
 
     override fun getViewType(): Int = DraggableView.DRAGGABLE_WIDGET
@@ -717,11 +730,20 @@ class WidgetStackView @JvmOverloads constructor(
 
     override fun setReorderBounceScale(scale: Float) {
         reorderBounceScale = scale
-        scaleX = scale
-        scaleY = scale
+        updateScale()
     }
 
     override fun getReorderBounceScale(): Float = reorderBounceScale
+
+    fun setScaleToFit(scale: Float) {
+        scaleToFit = scale
+        updateScale()
+    }
+
+    private fun updateScale() {
+        scaleX = scaleToFit * reorderBounceScale
+        scaleY = scaleToFit * reorderBounceScale
+    }
 
     override fun getPoppableType(): PoppableType = PoppableType.WIDGET
 

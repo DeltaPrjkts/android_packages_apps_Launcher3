@@ -44,6 +44,7 @@ import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.views.ActivityContext;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.launcher3.widget.NavigableAppWidgetHostView;
+import com.android.launcher3.widget.WidgetStackView;
 
 public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.FolderIconParent {
     static final String TAG = "ShortcutAndWidgetContainer";
@@ -131,7 +132,7 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
 
     public void setupLp(View child) {
         CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
-        if (child instanceof NavigableAppWidgetHostView) {
+        if (isWidget(child)) {
             DeviceProfile profile = mActivity.getDeviceProfile();
             final PointF appWidgetScale = profile.getAppWidgetScale((ItemInfo) child.getTag());
             lp.setup(mCellWidth, mCellHeight, invertLayoutHorizontally(), mCountX, mCountY,
@@ -172,7 +173,7 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
         CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
         final DeviceProfile dp = mActivity.getDeviceProfile();
 
-        if (child instanceof NavigableAppWidgetHostView) {
+        if (isWidget(child)) {
             final PointF appWidgetScale = dp.getAppWidgetScale((ItemInfo) child.getTag());
             lp.setup(mCellWidth, mCellHeight, invertLayoutHorizontally(), mCountX, mCountY,
                     appWidgetScale.x, appWidgetScale.y, mBorderSpace, dp.widgetPadding);
@@ -215,6 +216,10 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
         return child.getId() == R.id.reserved_container_workspace;
     }
 
+    private boolean isWidget(View child) {
+        return child instanceof NavigableAppWidgetHostView || child instanceof WidgetStackView;
+    }
+
     public boolean invertLayoutHorizontally() {
         return mInvertIfRtl && Utilities.isRtl(getResources());
     }
@@ -238,9 +243,7 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
      */
     public void layoutChild(View child) {
         CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
-        if (child instanceof NavigableAppWidgetHostView) {
-            NavigableAppWidgetHostView nahv = (NavigableAppWidgetHostView) child;
-
+        if (isWidget(child)) {
             // Scale and center the widget to fit within its cells.
             DeviceProfile profile = mActivity.getDeviceProfile();
             final PointF appWidgetScale = profile.getAppWidgetScale((ItemInfo) child.getTag());
@@ -248,8 +251,13 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
             float scaleY = appWidgetScale.y;
             Log.d(TAG, "appWidgetScale - [x,y]: [" + scaleX + "," + scaleY + "]");
 
-            nahv.setScaleToFit(Math.min(scaleX, scaleY));
-            nahv.getTranslateDelegate().setTranslation(INDEX_WIDGET_CENTERING,
+            float scale = Math.min(scaleX, scaleY);
+            if (child instanceof NavigableAppWidgetHostView widgetView) {
+                widgetView.setScaleToFit(scale);
+            } else if (child instanceof WidgetStackView stackView) {
+                stackView.setScaleToFit(scale);
+            }
+            ((Reorderable) child).getTranslateDelegate().setTranslation(INDEX_WIDGET_CENTERING,
                     -(lp.width - (lp.width * scaleX)) / 2.0f,
                     -(lp.height - (lp.height * scaleY)) / 2.0f);
         }
