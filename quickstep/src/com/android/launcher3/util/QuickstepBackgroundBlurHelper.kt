@@ -18,7 +18,7 @@ package com.android.launcher3.util
 
 import android.graphics.Canvas
 import android.graphics.Color
-import androidx.core.graphics.ColorUtils
+import android.graphics.HardwareRenderer
 import android.graphics.Outline
 import android.graphics.Path
 import android.graphics.Rect
@@ -29,6 +29,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.view.View
+import androidx.core.graphics.ColorUtils
 import com.android.internal.R as InternalR
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable
 import com.android.launcher3.Launcher
@@ -43,8 +44,8 @@ import javax.inject.Inject
 import javax.inject.Named
 
 /**
- * Quickstep implementation of the helper class that creates and updates the blur drawable used
- * for folders, the homescreen popup and customization bottom sheets.
+ * Quickstep implementation of the helper class that creates and updates the blur drawable used for
+ * folders, the homescreen popup and customization bottom sheets.
  */
 @ActivityContextSingleton
 class QuickstepBackgroundBlurHelper
@@ -58,8 +59,7 @@ constructor(
 
     private val folderBlurRadius = context.resources.getDimension(R.dimen.folder_blur_radius)
 
-    private val popupBlurRadius =
-        context.resources.getDimensionPixelSize(R.dimen.popup_blur_radius)
+    private val popupBlurRadius = context.resources.getDimensionPixelSize(R.dimen.popup_blur_radius)
 
     private val cornerRadius = Themes.getDialogCornerRadius(context)
     private val workspaceBlurRenderNode = RenderNode("workspaceBlur")
@@ -68,11 +68,10 @@ constructor(
     private val folderBlurDrawable: BackgroundBlurDrawable? by lazy {
         if (!isBlurEnabled()) null
         else
-            activityContext.dragLayer.getViewRootImpl()
-                .createBackgroundBlurDrawable()?.apply {
-                    setBlurRadius(folderBlurRadius.toInt())
-                    setVisible(false, false)
-                }
+            activityContext.dragLayer.getViewRootImpl().createBackgroundBlurDrawable()?.apply {
+                setBlurRadius(folderBlurRadius.toInt())
+                setVisible(false, false)
+            }
     }
 
     override fun prepareToOpenFolder(folder: Folder) {
@@ -95,10 +94,9 @@ constructor(
             folderIcon.setIconVisible(false)
             openFolders.forEach { (openFolder, _) -> openFolder.visibility = View.INVISIBLE }
 
-            val canvas =
-                workspaceBlurRenderNode.beginRecording(dragLayer.width, dragLayer.height)
+            val canvas = workspaceBlurRenderNode.beginRecording(dragLayer.width, dragLayer.height)
             try {
-                dragLayer.draw(canvas)
+                drawBackgroundSnapshot(canvas)
             } finally {
                 workspaceBlurRenderNode.endRecording()
             }
@@ -114,7 +112,7 @@ constructor(
     }
 
     override fun drawFolderBlur(canvas: Canvas, pathWrapper: PathWrapper?, view: View) {
-        if (!isBlurEnabled()) {
+        if (!canvas.isHardwareAccelerated || !isBlurEnabled()) {
             return
         }
 
@@ -145,11 +143,7 @@ constructor(
         workspaceBlurRenderNode.setClipToOutline(true)
 
         workspaceBlurRenderNode.setRenderEffect(
-            RenderEffect.createBlurEffect(
-                folderBlurRadius,
-                folderBlurRadius,
-                Shader.TileMode.CLAMP
-            )
+            RenderEffect.createBlurEffect(folderBlurRadius, folderBlurRadius, Shader.TileMode.CLAMP)
         )
         canvas.drawRenderNode(workspaceBlurRenderNode)
     }
@@ -177,6 +171,36 @@ constructor(
     }
 
     override fun isBlurEnabled(): Boolean = blurState.value
+
+    private fun drawBackgroundSnapshot(canvas: Canvas) {
+        val dragLayer = activityContext.dragLayer
+        val width = dragLayer.width
+        val height = dragLayer.height
+        if (
+            !canvas.isHardwareAccelerated ||
+                !dragLayer.isHardwareAccelerated ||
+                width <= 0 ||
+                height <= 0
+        ) {
+            return
+        }
+
+        val snapshot = RenderNode("launcherBackgroundSnapshot")
+        snapshot.setPosition(0, 0, width, height)
+        snapshot.setForceDarkAllowed(false)
+        try {
+            val recordingCanvas = snapshot.beginRecording(width, height)
+            try {
+                dragLayer.draw(recordingCanvas)
+            } finally {
+                snapshot.endRecording()
+            }
+            val bitmap = HardwareRenderer.createHardwareBitmap(snapshot, width, height) ?: return
+            canvas.drawBitmap(bitmap, 0f, 0f, null)
+        } finally {
+            snapshot.discardDisplayList()
+        }
+    }
 
     override fun isPopupBlurEnabled(): Boolean = isBlurEnabled() && isHomescreen()
 
@@ -207,7 +231,7 @@ constructor(
         val backdrop = RenderNode("bottomSheetBlur")
         val recordingCanvas = backdrop.beginRecording(dragLayer.width, dragLayer.height)
         try {
-            dragLayer.draw(recordingCanvas)
+            drawBackgroundSnapshot(recordingCanvas)
         } finally {
             backdrop.endRecording()
         }
@@ -298,20 +322,32 @@ constructor(
             return
         }
         val surfaceDrawable = view.background ?: return
-        if (surfaceDrawable is LayerDrawable
-            && surfaceDrawable.numberOfLayers > 1
-            && surfaceDrawable.getDrawable(0) is BackgroundBlurDrawable) {
+        if (
+            surfaceDrawable is LayerDrawable &&
+                surfaceDrawable.numberOfLayers > 1 &&
+                surfaceDrawable.getDrawable(0) is BackgroundBlurDrawable
+        ) {
             return
         }
 
         val viewRoot = activityContext.dragLayer.viewRootImpl ?: return
         val surface = surfaceDrawable.mutate()
-        val blurDrawable = viewRoot.createBackgroundBlurDrawable()?.apply {
-            setBlurRadius(popupBlurRadius)
-            getBlurCornerRadii(surface, view).applyTo(this)
-            setVisible(true, false)
-        } ?: return
-        view.background = LayerDrawable(arrayOf(blurDrawable, surface))
+        val blurDrawable =
+            viewRoot.createBackgroundBlurDrawable()?.apply {
+                setBlurRadius(popupBlurRadius)
+                getBlurCornerRadii(surface, view).applyTo(this)
+                setVisible(true, false)
+            } ?: return
+        view.background =
+            object : LayerDrawable(arrayOf(blurDrawable, surface)) {
+                override fun draw(canvas: Canvas) {
+                    if (canvas.isHardwareAccelerated) {
+                        super.draw(canvas)
+                    } else {
+                        surface.draw(canvas)
+                    }
+                }
+            }
         view.invalidate()
     }
 

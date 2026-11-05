@@ -9,7 +9,6 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.PaintDrawable;
@@ -18,13 +17,11 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.CrossWindowBlurListeners;
 import android.view.View;
-import android.view.ViewParent;
-import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 
-import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
+import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
@@ -32,7 +29,6 @@ import com.android.launcher3.Utilities;
 import com.android.launcher3.graphics.ThemeManager;
 import com.android.launcher3.util.MultiTranslateDelegate;
 import com.android.launcher3.util.Themes;
-import com.android.launcher3.views.ActivityContext;
 
 import java.util.function.Consumer;
 
@@ -48,7 +44,6 @@ public class CompactSearchBar extends FrameLayout
 
     private final MultiTranslateDelegate mTranslateDelegate = new MultiTranslateDelegate(this);
     private final Context mContext;
-    private final ActivityContext mActivityContext;
     private float mScaleForReorderBounce = 1f;
 
     private ImageView mActionIcon;
@@ -58,32 +53,23 @@ public class CompactSearchBar extends FrameLayout
         setUpBackground();
     };
 
-    private BackgroundBlurDrawable mBackgroundBlurDrawable;
-    private final Rect mLastBlurBounds = new Rect();
-    private final Rect mInnerRect = new Rect();
-    private float mLastCornerRadius = -1f;
-    private int mLastBlurRadius = -1;
+    private final AxViewBackdropBlur mBackdropBlur = new AxViewBackdropBlur(this, false);
+    private boolean mBlurDrawn;
     private boolean mCrossWindowBlurEnabled;
     private boolean mBlurEnabled = true;
     private int mBlurDepth = 45;
 
     private final Consumer<Boolean> mCrossWindowBlurListener =
             this::onCrossWindowBlurEnabledChanged;
-    private final ViewTreeObserver.OnPreDrawListener mBlurUpdateListener = () -> {
-        updateBlurState();
-        return true;
-    };
 
     public CompactSearchBar(Context context, AttributeSet attrs) {
         super(context, attrs);
         mContext = context;
-        mActivityContext = ActivityContext.lookupContextNoThrow(context);
     }
 
     public CompactSearchBar(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         mContext = context;
-        mActivityContext = ActivityContext.lookupContextNoThrow(context);
     }
 
     @Override
@@ -104,7 +90,7 @@ public class CompactSearchBar extends FrameLayout
         super.onAttachedToWindow();
         ThemeManager.INSTANCE.get(mContext).addChangeListener(mThemeChangeListener);
         LauncherPrefs.getPrefs(mContext).registerOnSharedPreferenceChangeListener(this);
-        getViewTreeObserver().addOnPreDrawListener(mBlurUpdateListener);
+        mBackdropBlur.onAttachedToWindow();
         mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
         CrossWindowBlurListeners.getInstance().addListener(
                 getContext().getMainExecutor(), mCrossWindowBlurListener);
@@ -117,16 +103,9 @@ public class CompactSearchBar extends FrameLayout
 
     @Override
     protected void onDetachedFromWindow() {
-        getViewTreeObserver().removeOnPreDrawListener(mBlurUpdateListener);
+        mBackdropBlur.onDetachedFromWindow();
+        mBlurDrawn = false;
         CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
-        if (mBackgroundBlurDrawable != null) {
-            mBackgroundBlurDrawable.setVisible(false, false);
-            mBackgroundBlurDrawable.setCallback(null);
-            mBackgroundBlurDrawable = null;
-        }
-        mLastBlurBounds.setEmpty();
-        mLastCornerRadius = -1f;
-        mLastBlurRadius = -1;
         ThemeManager.INSTANCE.get(mContext).removeChangeListener(mThemeChangeListener);
         LauncherPrefs.getPrefs(mContext).unregisterOnSharedPreferenceChangeListener(this);
         if (mInner != null) {
@@ -146,6 +125,7 @@ public class CompactSearchBar extends FrameLayout
     private void updateBlurPreferences() {
         mBlurEnabled = LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.get(mContext);
         mBlurDepth = Math.max(0, LauncherPrefs.BLUR_DEPTH.get(mContext));
+        mBackdropBlur.setBlurRadiusPx(mBlurDepth);
         updateBlurState();
     }
 
@@ -189,11 +169,7 @@ public class CompactSearchBar extends FrameLayout
     @Override
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
-        if (isVisible) {
-            postInvalidate();
-        } else {
-            hideBlur();
-        }
+        mBackdropBlur.onVisibilityAggregated(isVisible);
     }
 
     @Override
@@ -206,7 +182,8 @@ public class CompactSearchBar extends FrameLayout
 
     @Override
     protected boolean verifyDrawable(Drawable who) {
-        return super.verifyDrawable(who) || (who == mBackgroundBlurDrawable);
+        return super.verifyDrawable(who)
+                || (mBackdropBlur != null && mBackdropBlur.verifyDrawable(who));
     }
 
     @Override
@@ -224,24 +201,12 @@ public class CompactSearchBar extends FrameLayout
             return;
         }
 
-        mInnerRect.set(mInner.getLeft(), mInner.getTop(), mInner.getRight(), mInner.getBottom());
-        float cornerRadius = getCornerRadius();
-
         updateBlurState();
-        if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
-            if (!mLastBlurBounds.equals(mInnerRect)) {
-                mBackgroundBlurDrawable.setBounds(mInnerRect);
-                mLastBlurBounds.set(mInnerRect);
-            }
-            if (mLastCornerRadius != cornerRadius) {
-                mBackgroundBlurDrawable.setCornerRadius(cornerRadius);
-                mLastCornerRadius = cornerRadius;
-            }
-            if (mLastBlurRadius != mBlurDepth) {
-                mBackgroundBlurDrawable.setBlurRadius(mBlurDepth);
-                mLastBlurRadius = mBlurDepth;
-            }
-            mBackgroundBlurDrawable.draw(canvas);
+        boolean blurDrawn = mBackdropBlur.draw(canvas, mInner.getLeft(), mInner.getTop(),
+                mInner.getRight(), mInner.getBottom(), getCornerRadius());
+        if (mBlurDrawn != blurDrawn) {
+            mBlurDrawn = blurDrawn;
+            setUpBackground();
         }
     }
 
@@ -253,52 +218,22 @@ public class CompactSearchBar extends FrameLayout
     private boolean canDrawBlur() {
         return isBlurAvailable() && isAttachedToWindow() && mInner != null && mInner.isShown()
                 && mInner.getWidth() > 0 && mInner.getHeight() > 0
-                && getWindowVisibility() == VISIBLE
-                && (mActivityContext == null || !mActivityContext.isCrossWindowBlurPaused());
+                && getWindowVisibility() == VISIBLE;
     }
 
     private void updateBlurState() {
-        if (!canDrawBlur()) {
-            hideBlur();
-            return;
-        }
-        float alpha = 1f;
-        View view = mInner;
-        while (true) {
-            alpha *= view.getAlpha();
-            ViewParent parent = view.getParent();
-            if (!(parent instanceof View)) {
-                break;
-            }
-            view = (View) parent;
-        }
-        int blurAlpha = Math.round(255f * Utilities.boundToRange(alpha, 0f, 1f));
-        if (blurAlpha == 0) {
-            hideBlur();
-            return;
-        }
-        if (mBackgroundBlurDrawable == null && getViewRootImpl() != null) {
-            mBackgroundBlurDrawable = getViewRootImpl().createBackgroundBlurDrawable();
-            if (mBackgroundBlurDrawable != null) {
-                mBackgroundBlurDrawable.setCallback(this);
-                invalidate();
-            }
-        }
-        if (mBackgroundBlurDrawable == null) {
-            return;
-        }
-        mBackgroundBlurDrawable.setAlpha(blurAlpha);
-        if (!mBackgroundBlurDrawable.isVisible()) {
-            mBackgroundBlurDrawable.setVisible(true, false);
-            mLastBlurBounds.setEmpty();
-            invalidate();
+        mBackdropBlur.setEnabled(canDrawBlur());
+        if (mInner != null) {
+            mBackdropBlur.setSurfaceAlpha(Math.round(255f
+                    * Utilities.boundToRange(mInner.getAlpha(), 0f, 1f)));
         }
     }
 
     private void hideBlur() {
-        if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
-            mBackgroundBlurDrawable.setVisible(false, false);
-            mLastBlurBounds.setEmpty();
+        mBackdropBlur.setEnabled(false);
+        if (mBlurDrawn) {
+            mBlurDrawn = false;
+            setUpBackground();
         }
     }
 
@@ -350,7 +285,7 @@ public class CompactSearchBar extends FrameLayout
         if (mInner == null) return;
 
         float cornerRadius = getCornerRadius();
-        boolean canBlur = isBlurAvailable();
+        boolean canBlur = mBlurDrawn && isBlurAvailable();
         int opacity = Utilities.boundToRange(LauncherPrefs.HOTSEAT_QSB_OPACITY.get(mContext), 0, 100);
         int alphaValue = Math.round(255f * opacity / 100f * (canBlur ? 0.4f : 1f));
         int baseColor = LauncherPrefs.DOCK_THEME.get(mContext)

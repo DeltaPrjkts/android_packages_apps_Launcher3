@@ -489,12 +489,10 @@ android_library {
 android_app {
     name: "Launcher3",
     jni_libs: ["libtensorflowlite_jni"],
-    defaults: [
-        "launcher-non-platform-apis-defaults",
-        "launcher_compose_defaults",
-    ],
+    defaults: ["launcher_compose_defaults"],
 
     static_libs: [
+        "ax_blur",
         "Launcher3ResLib",
         "androidx.room_room-runtime",
         "androidx.room_room-ktx",
@@ -511,7 +509,7 @@ android_app {
         enabled: false,
     },
 
-    sdk_version: "current",
+    platform_apis: true,
     min_sdk_version: min_launcher3_sdk_version,
     target_sdk_version: "current",
     plugins: [
@@ -599,6 +597,7 @@ android_library {
     // in QuickstepResLib to take precendece, so it should be the final
     // dependency. See b/205278434 for how this can go wrong.
     static_libs: [
+        "ax_blur",
         "QuickstepResLib",
         "androidx.room_room-runtime",
         "androidx.room_room-ktx",
@@ -643,6 +642,7 @@ android_library {
     // dependency. See b/208647810 for how this can go wrong.
     static_libs: [
         "SystemUI-statsd",
+        "ax_blur",
         "QuickstepResLib",
         "androidx.room_room-runtime",
         "androidx.room_room-ktx",
