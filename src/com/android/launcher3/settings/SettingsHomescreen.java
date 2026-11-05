@@ -110,7 +110,6 @@ public class SettingsHomescreen extends ComposeSettingsActivity
                 LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_SEARCH_WIDGET_PENDING_CONFIG.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.COMPACT_SEARCH_BAR.getSharedPrefKey().equals(key) ||
-                LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.COMPACT_SEARCH_BAR_ACTION.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.QSB_STYLE_GOOGLE.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key) ||
