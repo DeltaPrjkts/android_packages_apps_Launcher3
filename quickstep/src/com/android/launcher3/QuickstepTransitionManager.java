@@ -365,9 +365,10 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         if (root == null || !root.isAttachedToWindow()
                 || root.getWidth() == 0 || root.getHeight() == 0) return null;
         InteractionBoost.requestForAnimation(source);
-        mImmediatePreview = new LaunchPreview(root, icon);
-        mImmediatePreview.start();
-        return mImmediatePreview::remove;
+        LaunchPreview preview = new LaunchPreview(root, icon);
+        mImmediatePreview = preview;
+        preview.start();
+        return preview::remove;
     }
 
     public void cancelImmediateAppLaunch() {
@@ -381,7 +382,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
     }
 
     /** A noninteractive overlay, using the same crop/scale path as the real opening window. */
-    private final class LaunchPreview extends View implements Runnable {
+    private final class LaunchPreview extends View {
         final BubbleTextView source;
         final android.view.ViewGroup root;
         final RectF iconBounds = new RectF();
@@ -394,9 +395,9 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         final android.graphics.drawable.Drawable logo;
         final AnimOpenProperties properties;
         final float originalAlpha;
-        final float durationScale = ValueAnimator.getDurationScale();
+        final ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        float progress;
         boolean sourceRestored;
-        final long started = android.os.SystemClock.uptimeMillis();
         final Runnable timeout = this::remove;
         boolean removed;
         boolean handedOff;
@@ -438,6 +439,15 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                     ? color.data : 0xff121212);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             setClickable(false);
+            animator.setDuration(CosAppAnimation.LAUNCH_DURATION);
+            animator.setInterpolator(LINEAR);
+            animator.addUpdateListener(value -> {
+                if (mLauncher.isDestroyed() || !root.isAttachedToWindow()) {
+                    remove();
+                    return;
+                }
+                setProgress((Float) value.getAnimatedValue());
+            });
         }
 
         void start() {
@@ -445,31 +455,22 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
             root.getOverlay().add(this);
             source.setAlpha(0f);
             postDelayed(timeout, 5000);
-            invalidate();
-            postOnAnimation(this);
+            animator.start();
         }
 
         long elapsed() {
-            return (long) (Math.max(0, android.os.SystemClock.uptimeMillis() - started)
-                    / Math.max(0.01f, durationScale));
+            return Math.round(progress * CosAppAnimation.LAUNCH_DURATION);
         }
 
-        @Override
-        public void run() {
+        void setProgress(float progress) {
             if (removed) return;
-            if (mLauncher.isDestroyed() || !root.isAttachedToWindow()) {
-                remove();
-                return;
-            }
+            this.progress = progress;
             invalidate();
-            if (elapsed() < CosAppAnimation.LAUNCH_DURATION) postOnAnimation(this);
         }
 
         @Override
         protected void onDraw(android.graphics.Canvas canvas) {
             if (removed) return;
-            float progress = Utilities.boundToRange(
-                    (float) elapsed() / CosAppAnimation.LAUNCH_DURATION, 0, 1);
             float t = mOpeningInterpolator.getInterpolation(progress);
             float iconScale = Utilities.mapRange(t, properties.initialAppIconScale,
                     properties.finalAppIconScale);
@@ -513,6 +514,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         void handOff() {
             if (removed || handedOff) return;
             handedOff = true;
+            animator.cancel();
             removeCallbacks(timeout);
             postOnAnimation(() -> {
                 if (!removed) animate().alpha(0f).setDuration(64).withEndAction(this::remove).start();
@@ -529,7 +531,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         void remove() {
             if (removed) return;
             removed = true;
-            removeCallbacks(this);
+            animator.cancel();
             removeCallbacks(timeout);
             animate().cancel();
             root.getOverlay().remove(this);
@@ -1316,6 +1318,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                     return;
                 }
 
+                if (preview != null) preview.setProgress(percent);
                 SurfaceTransaction transaction = new SurfaceTransaction();
 
                 for (int i = appTargets.length - 1; i >= 0; i--) {
@@ -2712,7 +2715,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 composeIconLaunchAnimator(anim, mV, appTargets, wallpaperTargets, nonAppTargets,
                         launcherClosing, continuePreview ? mPreview : null);
                 addCujInstrumentation(anim, Cuj.CUJ_LAUNCHER_APP_LAUNCH_FROM_ICON);
-                skipFirstFrame = mCosAppAnimations;
+                skipFirstFrame = false;
             }
 
             if (launcherClosing) {
@@ -2731,10 +2734,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 }
             }
 
+            long previewPlayTime = continuePreview ? mPreview.elapsed() : 0;
             result.setAnimation(anim, mLauncher, mOnEndCallback::executeAllAndDestroy,
                     skipFirstFrame);
             if (continuePreview && anim.isStarted()) {
-                anim.setCurrentPlayTime(Math.min(mPreview.elapsed(),
+                anim.setCurrentPlayTime(Math.min(previewPlayTime,
                         Math.max(0, anim.getTotalDuration() - 1)));
                 mPreview.handOff();
             }
@@ -3096,9 +3100,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
         @Override
         public void onUpdate(RectF currentRectF, float progress) {
+            SurfaceTransaction transaction = mCosAppAnimations
+                    ? new SurfaceTransaction() : mTransaction;
             for (int i = mAppTargets.length - 1; i >= 0; i--) {
                 RemoteAnimationTarget target = mAppTargets[i];
-                SurfaceProperties builder = mTransaction.forSurface(target.leash);
+                SurfaceProperties builder = transaction.forSurface(target.leash);
 
                 if (target.localBounds != null) {
                     mTmpPos.set(target.localBounds.left, target.localBounds.top);
@@ -3156,7 +3162,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                             .setAlpha(1f);
                 }
             }
-            mSurfaceApplier.scheduleApply(mTransaction);
+            mSurfaceApplier.scheduleApply(transaction);
         }
 
         protected float getWindowAlpha(float progress) {

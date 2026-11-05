@@ -24,7 +24,7 @@ import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.SystemClock;
+import android.view.Choreographer;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -152,6 +152,10 @@ public class RectFSpringAnim extends ReleaseCheck {
     private final boolean mCos;
     private long mCosStartTime;
     private float mCosDurationScale;
+    private float mCosFadeProgress;
+    private Choreographer mChoreographer;
+    private boolean mUpdatePending;
+    private final Runnable mFrameUpdate;
     private boolean mEnding;
     private boolean mWindowDetached;
 
@@ -171,6 +175,7 @@ public class RectFSpringAnim extends ReleaseCheck {
         mRectDamping = config.rectDamping;
         mUseIconSpringConfig = config instanceof IconSpringConfig;
         mCos = config instanceof CosSpringConfig;
+        mFrameUpdate = mCos ? this::dispatchFrameUpdate : null;
         mUseConfiguredSpring = mUseIconSpringConfig || mCos || config instanceof WidgetSpringConfig;
 
         mCurrentY = getTrackedYFromRect(mStartRect);
@@ -204,10 +209,7 @@ public class RectFSpringAnim extends ReleaseCheck {
     }
 
     public float getCosFadeProgress() {
-        if (mCosStartTime == 0) return 0f;
-        if (mCosDurationScale <= 0 || isEnded() || mEnding) return 1f;
-        return CosAppAnimation.iconFade(
-                (SystemClock.uptimeMillis() - mCosStartTime) / mCosDurationScale);
+        return mCosFadeProgress;
     }
 
     private float getTrackedYFromRect(RectF rect) {
@@ -317,7 +319,9 @@ public class RectFSpringAnim extends ReleaseCheck {
         if (mCos) {
             if ((endX - startX) * xVelocityPxPerS < 0) xVelocityPxPerS *= 0.25f;
             if ((endY - startY) * yVelocityPxPerS < 0) yVelocityPxPerS *= 0.25f;
-            mCosStartTime = SystemClock.uptimeMillis();
+            mChoreographer = Choreographer.getInstance();
+            mCosStartTime = 0;
+            mCosFadeProgress = 0f;
             mCosDurationScale = ValueAnimator.getDurationScale();
         }
 
@@ -379,6 +383,11 @@ public class RectFSpringAnim extends ReleaseCheck {
 
     public void end() {
         mEnding = true;
+        if (mUpdatePending) {
+            mChoreographer.removeCallbacks(Choreographer.CALLBACK_INSETS_ANIMATION,
+                    mFrameUpdate, null);
+            mUpdatePending = false;
+        }
         if (mAnimsStarted) {
             if (mRectXSpring.canSkipToEnd()) {
                 mRectXSpring.skipToEnd();
@@ -419,6 +428,35 @@ public class RectFSpringAnim extends ReleaseCheck {
             return;
         }
 
+        if (mCos && !mEnding) {
+            if (!mUpdatePending) {
+                mUpdatePending = true;
+                mChoreographer.postCallback(Choreographer.CALLBACK_INSETS_ANIMATION,
+                        mFrameUpdate, null);
+            }
+        } else {
+            dispatchUpdate();
+        }
+    }
+
+    private void dispatchFrameUpdate() {
+        if (!mUpdatePending) return;
+        mUpdatePending = false;
+        dispatchUpdate();
+        maybeOnEnd();
+    }
+
+    private void dispatchUpdate() {
+        if (mCos) {
+            if (mCosDurationScale <= 0 || isEnded() || mEnding) {
+                mCosFadeProgress = 1f;
+            } else {
+                long frameTime = mChoreographer.getFrameTime();
+                if (mCosStartTime == 0) mCosStartTime = frameTime;
+                mCosFadeProgress = CosAppAnimation.iconFade(
+                        (frameTime - mCosStartTime) / mCosDurationScale);
+            }
+        }
         if (!mOnUpdateListeners.isEmpty()) {
             float startWidth = mStartRect.width();
             float startHeight = mStartRect.height();
@@ -460,7 +498,7 @@ public class RectFSpringAnim extends ReleaseCheck {
     }
 
     private void maybeOnEnd() {
-        if (mAnimsStarted && isEnded()) {
+        if (mAnimsStarted && isEnded() && !mUpdatePending) {
             mAnimsStarted = false;
             setCanRelease(true);
             for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
