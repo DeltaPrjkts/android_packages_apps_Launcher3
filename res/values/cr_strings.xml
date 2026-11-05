@@ -151,6 +151,8 @@
     <string name="dock_search_widget_summary">Replace the dock search bar with a compatible search widget</string>
     <string name="compact_search_bar_title">Compact search bar</string>
     <string name="compact_search_bar_summary">Show a compact search pill above the app dock</string>
+    <string name="compact_search_bar_blur_title">Compact search bar blur</string>
+    <string name="compact_search_bar_blur_summary">Apply blur effect to compact search bar</string>
     <string name="compact_search_bar_action_title">Compact search action</string>
     <string name="compact_search_bar_action_google">Google search</string>
     <string name="compact_search_bar_action_lens">Google Lens</string>

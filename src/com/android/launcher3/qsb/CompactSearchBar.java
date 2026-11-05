@@ -6,19 +6,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.PaintDrawable;
 import android.net.Uri;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.CrossWindowBlurListeners;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
@@ -26,6 +30,8 @@ import com.android.launcher3.Utilities;
 import com.android.launcher3.graphics.ThemeManager;
 import com.android.launcher3.util.MultiTranslateDelegate;
 import com.android.launcher3.util.Themes;
+
+import java.util.function.Consumer;
 
 public class CompactSearchBar extends FrameLayout
         implements Reorderable, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -45,6 +51,18 @@ public class CompactSearchBar extends FrameLayout
     private View mInner;
     private ThemeManager.ThemeChangeListener mThemeChangeListener;
 
+    private BackgroundBlurDrawable mBackgroundBlurDrawable;
+    private final Rect mLastBlurBounds = new Rect();
+    private final Rect mInnerRect = new Rect();
+    private float mLastCornerRadius = -1f;
+    private int mLastBlurRadius = -1;
+    private boolean mCrossWindowBlurEnabled;
+    private boolean mBlurEnabled = true;
+    private int mBlurDepth = 45;
+
+    private final Consumer<Boolean> mCrossWindowBlurListener =
+            this::onCrossWindowBlurEnabledChanged;
+
     public CompactSearchBar(Context context, AttributeSet attrs) {
         super(context, attrs);
         mContext = context;
@@ -62,6 +80,7 @@ public class CompactSearchBar extends FrameLayout
         mActionIcon = findViewById(R.id.gemini_icon);
         mInner = findViewById(R.id.compact_search_bar_inner);
 
+        updateBlurPreferences();
         setIcon();
         setUpBackground();
         setUpClick();
@@ -75,8 +94,28 @@ public class CompactSearchBar extends FrameLayout
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+        CrossWindowBlurListeners.getInstance().addListener(
+                getContext().getMainExecutor(), mCrossWindowBlurListener);
+        updateBlurPreferences();
+        setUpBackground();
+        postInvalidate();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
+        if (mBackgroundBlurDrawable != null) {
+            mBackgroundBlurDrawable.setVisible(false, false);
+            mBackgroundBlurDrawable.setCallback(null);
+            mBackgroundBlurDrawable = null;
+        }
+        mLastBlurBounds.setEmpty();
+        mLastCornerRadius = -1f;
+        mLastBlurRadius = -1;
         if (mThemeChangeListener != null) {
             ThemeManager.INSTANCE.get(mContext).removeChangeListener(mThemeChangeListener);
             mThemeChangeListener = null;
@@ -88,6 +127,21 @@ public class CompactSearchBar extends FrameLayout
         }
     }
 
+    private void onCrossWindowBlurEnabledChanged(boolean enabled) {
+        mCrossWindowBlurEnabled = enabled;
+        if (!enabled && mBackgroundBlurDrawable != null) {
+            mBackgroundBlurDrawable.setVisible(false, false);
+        }
+        setUpBackground();
+        postInvalidate();
+    }
+
+    private void updateBlurPreferences() {
+        mBlurEnabled = LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.get(mContext);
+        mBlurDepth = LauncherPrefs.BLUR_DEPTH.get(mContext);
+        mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+    }
+
     @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         if (LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key)
@@ -95,9 +149,116 @@ public class CompactSearchBar extends FrameLayout
                 || LauncherPrefs.COMPACT_SEARCH_BAR_ACTION.getSharedPrefKey().equals(key)
                 || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)
                 || LauncherPrefs.HOTSEAT_QSB_STROKE_WIDTH.getSharedPrefKey().equals(key)
-                || LauncherPrefs.SEARCH_RADIUS_SIZE.getSharedPrefKey().equals(key)) {
+                || LauncherPrefs.SEARCH_RADIUS_SIZE.getSharedPrefKey().equals(key)
+                || LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey().equals(key)
+                || LauncherPrefs.BLUR_DEPTH.getSharedPrefKey().equals(key)) {
+            updateBlurPreferences();
             setIcon();
             setUpBackground();
+            postInvalidate();
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (changed && mBlurEnabled) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    public void setAlpha(float alpha) {
+        float oldAlpha = getAlpha();
+        super.setAlpha(alpha);
+        if (mBlurEnabled && (alpha >= 0.99f || alpha <= 0.01f || (oldAlpha <= 0.01f && alpha > 0.01f))) {
+            invalidate();
+        }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == VISIBLE) {
+            updateBlurPreferences();
+            postInvalidate();
+        }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (isVisible) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    protected boolean verifyDrawable(Drawable who) {
+        return super.verifyDrawable(who) || (who == mBackgroundBlurDrawable);
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        drawBlur(canvas);
+        super.dispatchDraw(canvas);
+    }
+
+    private void drawBlur(Canvas canvas) {
+        boolean canBlur = mBlurEnabled && mCrossWindowBlurEnabled && mBlurDepth > 0;
+        if (!canBlur || getVisibility() != VISIBLE || !isAttachedToWindow() || mInner == null) {
+            if (mBackgroundBlurDrawable != null && mBackgroundBlurDrawable.isVisible()) {
+                mBackgroundBlurDrawable.setVisible(false, false);
+                mLastBlurBounds.setEmpty();
+            }
+            return;
+        }
+
+        int innerLeft = mInner.getLeft();
+        int innerTop = mInner.getTop();
+        int innerRight = mInner.getRight();
+        int innerBottom = mInner.getBottom();
+
+        if (innerRight <= innerLeft || innerBottom <= innerTop) {
+            return;
+        }
+
+        mInnerRect.set(innerLeft, innerTop, innerRight, innerBottom);
+        float cornerRadius = getCornerRadius();
+
+        if (mBackgroundBlurDrawable == null && getViewRootImpl() != null) {
+            mBackgroundBlurDrawable = getViewRootImpl().createBackgroundBlurDrawable();
+            if (mBackgroundBlurDrawable != null) {
+                mBackgroundBlurDrawable.setCallback(this);
+                mBackgroundBlurDrawable.setApplyRenderNodeAlpha(true);
+            }
+        }
+
+        if (mBackgroundBlurDrawable != null) {
+            if (!mLastBlurBounds.equals(mInnerRect)) {
+                mBackgroundBlurDrawable.setBounds(mInnerRect);
+                mLastBlurBounds.set(mInnerRect);
+            }
+            if (mLastCornerRadius != cornerRadius) {
+                mBackgroundBlurDrawable.setCornerRadius(cornerRadius);
+                mLastCornerRadius = cornerRadius;
+            }
+            if (mLastBlurRadius != mBlurDepth) {
+                mBackgroundBlurDrawable.setBlurRadius(mBlurDepth);
+                mLastBlurRadius = mBlurDepth;
+            }
+            if (!mBackgroundBlurDrawable.isVisible()) {
+                mBackgroundBlurDrawable.setVisible(true, false);
+            }
+            mBackgroundBlurDrawable.draw(canvas);
         }
     }
 
@@ -149,7 +310,10 @@ public class CompactSearchBar extends FrameLayout
         if (mInner == null) return;
 
         float cornerRadius = getCornerRadius();
-        int alphaValue = (LauncherPrefs.HOTSEAT_QSB_OPACITY.get(mContext) * 255) / 100;
+        boolean canBlur = mBlurEnabled && mCrossWindowBlurEnabled && mBlurDepth > 0;
+        int opacity = LauncherPrefs.HOTSEAT_QSB_OPACITY.get(mContext);
+        int effectiveOpacity = (opacity == 100 && canBlur) ? 40 : opacity;
+        int alphaValue = (effectiveOpacity * 255) / 100;
         int baseColor = LauncherPrefs.DOCK_THEME.get(mContext)
                 ? Themes.getAttrColor(mContext, R.attr.qsbFillColorThemed)
                 : Themes.getAttrColor(mContext, R.attr.qsbFillColor);
@@ -164,6 +328,12 @@ public class CompactSearchBar extends FrameLayout
             PaintDrawable strokeDrawable = new PaintDrawable(Themes.getColorAccent(mContext));
             strokeDrawable.getPaint().setStyle(Paint.Style.STROKE);
             strokeDrawable.getPaint().setStrokeWidth(strokeWidth);
+            strokeDrawable.setCornerRadius(cornerRadius);
+            mInner.setBackground(new LayerDrawable(new Drawable[]{backgroundDrawable, strokeDrawable}));
+        } else if (canBlur) {
+            PaintDrawable strokeDrawable = new PaintDrawable(Color.argb(35, 255, 255, 255));
+            strokeDrawable.getPaint().setStyle(Paint.Style.STROKE);
+            strokeDrawable.getPaint().setStrokeWidth(Math.max(1, Utilities.dpToPx(1f)));
             strokeDrawable.setCornerRadius(cornerRadius);
             mInner.setBackground(new LayerDrawable(new Drawable[]{backgroundDrawable, strokeDrawable}));
         } else {

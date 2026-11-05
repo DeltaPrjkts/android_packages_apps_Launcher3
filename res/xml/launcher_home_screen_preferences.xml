@@ -356,6 +356,14 @@
             android:dependency="pref_dock_search"
             launcher:iconSpaceReserved="false" />
 
+        <SwitchPreferenceCompat
+            android:key="pref_compact_search_bar_blur"
+            android:title="@string/compact_search_bar_blur_title"
+            android:summary="@string/compact_search_bar_blur_summary"
+            android:defaultValue="true"
+            android:dependency="pref_compact_search_bar"
+            launcher:iconSpaceReserved="false" />
+
         <ListPreference
             android:key="pref_compact_search_bar_action"
             android:title="@string/compact_search_bar_action_title"

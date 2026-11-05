@@ -110,6 +110,7 @@ public class SettingsHomescreen extends ComposeSettingsActivity
                 LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_SEARCH_WIDGET_PENDING_CONFIG.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.COMPACT_SEARCH_BAR.getSharedPrefKey().equals(key) ||
+                LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.COMPACT_SEARCH_BAR_ACTION.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.QSB_STYLE_GOOGLE.getSharedPrefKey().equals(key) ||
                 LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key) ||
@@ -273,6 +274,8 @@ public class SettingsHomescreen extends ComposeSettingsActivity
                     !isCompact && !customWidget);
             setQsbPrefEnabled(LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey(),
                     !isCompact);
+            setQsbPrefEnabled(LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey(),
+                    isDockSearch && isCompact);
             setQsbPrefEnabled(LauncherPrefs.COMPACT_SEARCH_BAR_ACTION.getSharedPrefKey(),
                     isDockSearch && isCompact);
             setQsbPrefEnabled(LauncherPrefs.DOCK_UNIVERSAL_SEARCH.getSharedPrefKey(),

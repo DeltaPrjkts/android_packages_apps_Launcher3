@@ -288,6 +288,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField val DOCK_MUSIC_SEARCH = backedUpItem("pref_dock_music_search", false)
         @JvmField val DOCK_UNIVERSAL_SEARCH = backedUpItem("pref_dock_universal_search", false)
         @JvmField val COMPACT_SEARCH_BAR = backedUpItem("pref_compact_search_bar", false)
+        @JvmField val COMPACT_SEARCH_BAR_BLUR = backedUpItem("pref_compact_search_bar_blur", true)
         @JvmField val COMPACT_SEARCH_BAR_ACTION = backedUpItem("pref_compact_search_bar_action", "google_search")
         @JvmField val QSB_STYLE_GOOGLE = backedUpItem("pref_qsb_style_google", true)
         @JvmField val DOCK_SEARCH = backedUpItem("pref_dock_search", true)
