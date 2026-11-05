@@ -49,6 +49,7 @@ import com.android.launcher3.model.data.IconRequestInfo
 import com.android.launcher3.model.data.ItemInfo
 import com.android.launcher3.model.data.ItemInfoWithIcon
 import com.android.launcher3.model.data.LauncherAppWidgetInfo
+import com.android.launcher3.model.data.WidgetStackInfo
 import com.android.launcher3.model.data.WorkspaceItemInfo
 import com.android.launcher3.pm.PackageInstallInfo
 import com.android.launcher3.pm.UserManagerState
@@ -123,6 +124,7 @@ class WorkspaceItemProcessor(
                 Favorites.ITEM_TYPE_DEEP_SHORTCUT -> processAppOrDeepShortcut()
                 Favorites.ITEM_TYPE_FOLDER,
                 Favorites.ITEM_TYPE_APP_PAIR -> processFolderOrAppPair()
+                Favorites.ITEM_TYPE_WIDGET_STACK -> processWidgetStack()
                 Favorites.ITEM_TYPE_APPWIDGET,
                 Favorites.ITEM_TYPE_CUSTOM_APPWIDGET -> processWidget()
                 Favorites.ITEM_TYPE_FILE_SYSTEM_FILE,
@@ -500,6 +502,29 @@ class WorkspaceItemProcessor(
         c.checkAndAddItem(collection, loadedItems, memoryLogger)
     }
 
+    private fun processWidgetStack() {
+        var collection = c.findOrMakeCollection(c.id, Favorites.ITEM_TYPE_APPWIDGET, loadedItems)
+        if (collection is FolderInfo) {
+            val newStack = WidgetStackInfo()
+            collection.getContents().forEach(newStack::add)
+            collection = newStack
+        }
+        if (collection is WidgetStackInfo && collection.getWidgets().isEmpty()) {
+            c.markDeleted("processWidgetStack: Empty widget stack", RestoreError.WIDGET_REMOVED)
+            return
+        }
+        c.applyCommonProperties(collection)
+        collection.spanX = c.spanX.coerceAtLeast(1)
+        collection.spanY = c.spanY.coerceAtLeast(1)
+        collection.minSpanX = collection.spanX
+        collection.minSpanY = collection.spanY
+        if (collection is WidgetStackInfo) {
+            collection.currentIndex = c.options
+        }
+        c.markRestored()
+        c.checkAndAddItem(collection, loadedItems, memoryLogger)
+    }
+
     /**
      * This method, similar to processAppShortcut above, verifies that a widget should be shown on
      * the home screen, updates the database accordingly, formats the data in such a way that it is
@@ -537,7 +562,7 @@ class WorkspaceItemProcessor(
             )
             return
         }
-        if (!c.isOnWorkspaceOrHotseat) {
+        if (!c.isOnWorkspaceOrHotseat && c.container <= 0) {
             c.markDeleted(
                 "processWidget: invalid Widget container != CONTAINER_DESKTOP nor CONTAINER_HOTSEAT." +
                     " id=${c.id}," +

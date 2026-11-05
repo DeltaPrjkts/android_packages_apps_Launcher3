@@ -128,6 +128,11 @@ public class LauncherSettings {
          */
         public static final int ITEM_TYPE_APP_PAIR = 10;
 
+        /**
+         * The favorite is a stack of widgets.
+         */
+        public static final int ITEM_TYPE_WIDGET_STACK = 16;
+
         // *** Below enum values are used for metrics purpose but not used in Favorites DB ***
 
         /**
@@ -241,6 +246,7 @@ public class LauncherSettings {
                 case ITEM_TYPE_TASK: return "TASK";
                 case ITEM_TYPE_QSB: return "QSB";
                 case ITEM_TYPE_APP_PAIR: return "APP_PAIR";
+                case ITEM_TYPE_WIDGET_STACK: return "WIDGET_STACK";
                 case ITEM_TYPE_PRIVATE_SPACE_INSTALL_APP_BUTTON:
                     return "PRIVATE_SPACE_INSTALL_APP_BUTTON";
                 case ITEM_TYPE_SYSTEM_DRAG: return "SYSTEM_DRAG";

@@ -20,7 +20,9 @@ import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_DESKTOP
 import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_HOTSEAT;
 import static com.android.launcher3.LauncherSettings.Favorites.DESKTOP_ICON_FLAG;
 import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APPLICATION;
+import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APPWIDGET;
 import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APP_PAIR;
+import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_CUSTOM_APPWIDGET;
 import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_DEEP_SHORTCUT;
 import static com.android.launcher3.icons.cache.CacheLookupFlag.DEFAULT_LOOKUP_FLAG;
 import static com.android.launcher3.model.data.ItemInfoWithIcon.FLAG_ARCHIVED;
@@ -59,6 +61,7 @@ import com.android.launcher3.model.data.CollectionInfo;
 import com.android.launcher3.model.data.FolderInfo;
 import com.android.launcher3.model.data.IconRequestInfo;
 import com.android.launcher3.model.data.ItemInfo;
+import com.android.launcher3.model.data.WidgetStackInfo;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.pm.UserCache;
 import com.android.launcher3.pm.UserManagerState;
@@ -541,6 +544,11 @@ public class LoaderCursor extends CursorWrapper {
      * or make a new one.
      */
     public CollectionInfo findOrMakeFolder(int id, IntSparseArrayMap<ItemInfo> loadedItems) {
+        return findOrMakeCollection(id, -1, loadedItems);
+    }
+
+    public CollectionInfo findOrMakeCollection(
+            int id, int childItemType, IntSparseArrayMap<ItemInfo> loadedItems) {
         // See if a placeholder was created for us already
         ItemInfo info = loadedItems.get(id);
         if (info instanceof CollectionInfo c) return c;
@@ -548,11 +556,11 @@ public class LoaderCursor extends CursorWrapper {
         CollectionInfo pending = mPendingCollectionInfo.get(id);
         if (pending != null) return pending;
 
-        // No placeholder -- create a new blank folder instance. At this point, we don't know
-        // if the desired container is supposed to be a folder or an app pair. In the case that
-        // it is an app pair, the blank folder will be replaced by a blank app pair when the app
-        // pair is getting processed, in WorkspaceItemProcessor.processFolderOrAppPair().
-        pending = new FolderInfo();
+        if (childItemType == ITEM_TYPE_APPWIDGET || childItemType == ITEM_TYPE_CUSTOM_APPWIDGET) {
+            pending = new WidgetStackInfo();
+        } else {
+            pending = new FolderInfo();
+        }
         pending.id = id;
         mPendingCollectionInfo.put(id, pending);
         return pending;
@@ -580,10 +588,12 @@ public class LoaderCursor extends CursorWrapper {
             loadedItems.put(info.id, info);
             if ((info.itemType == ITEM_TYPE_APP_PAIR
                     || info.itemType == ITEM_TYPE_DEEP_SHORTCUT
-                    || info.itemType == ITEM_TYPE_APPLICATION)
+                    || info.itemType == ITEM_TYPE_APPLICATION
+                    || info.itemType == ITEM_TYPE_APPWIDGET
+                    || info.itemType == ITEM_TYPE_CUSTOM_APPWIDGET)
                     && info.container != CONTAINER_DESKTOP
                     && info.container != CONTAINER_HOTSEAT) {
-                findOrMakeFolder(info.container, loadedItems).add(info);
+                findOrMakeCollection(info.container, info.itemType, loadedItems).add(info);
             }
             if (mRestoreEventLogger != null) {
                 mRestoreEventLogger.logSingleFavoritesItemRestored(itemType);

@@ -53,6 +53,7 @@ import com.android.launcher3.views.AbstractSlideInView;
 import com.android.launcher3.widget.picker.model.WidgetPickerDataProvider.WidgetPickerDataChangeListener;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Base class for various widgets popup
@@ -188,11 +189,33 @@ public abstract class BaseWidgetSheet extends AbstractSlideInView<BaseActivity>
         return mContent.getHeight() + getBottomOffsetPx();
     }
 
+    protected Consumer<PendingAddItemInfo> mStackSelectCallback;
+
+    public void setStackSelectCallback(Consumer<PendingAddItemInfo> callback) {
+        mStackSelectCallback = callback;
+    }
+
     /**
      * Click handler for tap to add button. This handler assumes we are in the Launcher activity and
      * should not be used when the widget sheet is displayed elsewhere.
      */
     private void addWidget(@NonNull PendingAddItemInfo info) {
+        if (mStackSelectCallback != null) {
+            final Consumer<PendingAddItemInfo> callback = mStackSelectCallback;
+            mStackSelectCallback = null;
+            final AtomicBoolean hasRun = new AtomicBoolean(false);
+            addOnCloseListener(() -> {
+                if (hasRun.get()) return;
+                hasRun.set(true);
+                Launcher launcher = Launcher.getLauncher(mActivityContext);
+                launcher.getStateManager().goToState(NORMAL, forSuccessCallback(() -> {
+                    callback.accept(info);
+                }));
+            });
+            close(/* animate= */ true);
+            return;
+        }
+
         // Using a boolean flag here to make sure the callback is only run once. This should never
         // happen because we close the sheet and it will be reconstructed the next time it is
         // needed.

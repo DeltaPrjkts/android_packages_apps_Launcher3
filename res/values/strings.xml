@@ -242,6 +242,14 @@
     <string name="bubble">Bubble</string>
     <!-- Label for widget settings shows in the long press menu for widgets. [CHAR_LIMIT=20] -->
     <string name="widget_settings">Settings</string>
+    <!-- Label for creating a widget stack in the widget long press menu. [CHAR_LIMIT=20] -->
+    <string name="create_widget_stack">Create stack</string>
+    <!-- Label for adding a widget to an existing stack. [CHAR_LIMIT=20] -->
+    <string name="add_widget_to_stack">Add widget</string>
+    <!-- Prompt when selecting a widget to add to a stack. [CHAR_LIMIT=40] -->
+    <string name="select_widget_to_stack">Select a widget to stack</string>
+    <!-- Notification when widget stack has reached maximum capacity. [CHAR_LIMIT=40] -->
+    <string name="widget_stack_full">Widget stack is full</string>
     <!-- Label for pinning an item to the taskbar. [CHAR_LIMIT=20] -->
     <string name="pin_to_taskbar">Pin to Taskbar</string>
     <!-- Label for unpinning an item from the taskbar. [CHAR_LIMIT=20] -->

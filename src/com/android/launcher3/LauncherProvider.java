@@ -150,7 +150,8 @@ public class LauncherProvider extends ContentProvider {
             // id, or else be deleted.
             if (values.containsKey(Favorites._ID)
                     && Favorites.ITEM_TYPE_FOLDER != values.getAsInteger(Favorites.ITEM_TYPE)
-                    && Favorites.ITEM_TYPE_APP_PAIR != values.getAsInteger(Favorites.ITEM_TYPE)) {
+                    && Favorites.ITEM_TYPE_APP_PAIR != values.getAsInteger(Favorites.ITEM_TYPE)
+                    && Favorites.ITEM_TYPE_WIDGET_STACK != values.getAsInteger(Favorites.ITEM_TYPE)) {
                 int id = controller.generateNewItemId();
                 values.put(LauncherSettings.Favorites._ID, id);
             }

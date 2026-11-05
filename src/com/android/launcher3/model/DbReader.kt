@@ -85,6 +85,13 @@ class DbReader(val mDb: SQLiteDatabase, val mTableName: String, val mContext: Co
                         }
                     }
 
+                    LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK -> {
+                        val total = getFolderItemsCount(entry)
+                        if (total == 0) {
+                            throw Exception("Widget stack is empty")
+                        }
+                    }
+
                     else -> throw Exception("Invalid item type")
                 }
             } catch (e: Exception) {
@@ -187,6 +194,12 @@ class DbReader(val mDb: SQLiteDatabase, val mTableName: String, val mContext: Co
                         check(getFolderItemsCount(entry) != 2) {
                             "App pair contains fewer or more than 2 items"
                         }
+                    }
+
+                    LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK -> {
+                        check(getFolderItemsCount(entry) > 0) { "Widget stack is empty" }
+                        entry.minSpanX = entry.spanX
+                        entry.minSpanY = entry.spanY
                     }
 
                     else -> throw Exception("Invalid item type")

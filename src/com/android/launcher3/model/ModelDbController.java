@@ -434,8 +434,10 @@ public class ModelDbController {
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         try (SQLiteTransaction t = new SQLiteTransaction(db)) {
             // Select folders whose id do not match any container value.
-            String selection = LauncherSettings.Favorites.ITEM_TYPE + " = "
-                    + LauncherSettings.Favorites.ITEM_TYPE_FOLDER + " AND "
+            String selection = "(" + LauncherSettings.Favorites.ITEM_TYPE + " = "
+                    + LauncherSettings.Favorites.ITEM_TYPE_FOLDER + " OR "
+                    + LauncherSettings.Favorites.ITEM_TYPE + " = "
+                    + LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK + ") AND "
                     + LauncherSettings.Favorites._ID +  " NOT IN (SELECT "
                     + LauncherSettings.Favorites.CONTAINER + " FROM "
                     + Favorites.TABLE_NAME + ")";

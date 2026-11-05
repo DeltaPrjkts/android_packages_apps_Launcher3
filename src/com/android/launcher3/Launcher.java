@@ -215,6 +215,7 @@ import com.android.launcher3.model.data.FolderInfo;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.ItemInfoWithIcon;
 import com.android.launcher3.model.data.LauncherAppWidgetInfo;
+import com.android.launcher3.model.data.WidgetStackInfo;
 import com.android.launcher3.model.data.PredictedContainerInfo;
 import com.android.launcher3.model.data.WorkspaceData;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
@@ -271,6 +272,7 @@ import com.android.launcher3.widget.PendingAddWidgetInfo;
 import com.android.launcher3.widget.PendingAppWidgetHostView;
 import com.android.launcher3.widget.WidgetAddFlowHandler;
 import com.android.launcher3.widget.WidgetManagerHelper;
+import com.android.launcher3.widget.WidgetStackView;
 import com.android.launcher3.widget.WidgetVisibilityTracker;
 import com.android.launcher3.widget.custom.CustomWidgetManager;
 import com.android.launcher3.widget.model.WidgetsListBaseEntry;
@@ -1539,11 +1541,20 @@ public class Launcher extends StatefulActivity<LauncherState>
         hostView.setVisibility(View.VISIBLE);
         mItemInflater.prepareAppWidget(hostView, launcherInfo);
         if (hostView.getParent() == null) {
-            mWorkspace.addInScreen(hostView, launcherInfo);
+            if (itemInfo.container > 0) {
+                View collection = mWorkspace.getViewByItemId(itemInfo.container);
+                if (collection instanceof WidgetStackView stackView) {
+                    stackView.addWidgetView(launcherInfo, hostView);
+                } else {
+                    mWorkspace.addInScreen(hostView, launcherInfo);
+                }
+            } else {
+                mWorkspace.addInScreen(hostView, launcherInfo);
+            }
         }
 
         // Show the widget resize frame.
-        if (hostView instanceof LauncherAppWidgetHostView) {
+        if (itemInfo.container <= 0 && hostView instanceof LauncherAppWidgetHostView) {
             final LauncherAppWidgetHostView launcherHostView = (LauncherAppWidgetHostView) hostView;
             showWidgetResizeFrame(launcherHostView, launcherInfo, presenterPos);
         }
@@ -2122,6 +2133,9 @@ public class Launcher extends StatefulActivity<LauncherState>
         } else if (collectionIcon instanceof AppPairIcon appPairIcon) {
             removeItem(appPairIcon, appPairIcon.getInfo(), deleteFromDb,
                     "removing app pair because one of its member apps was removed");
+            return true;
+        } else if (collectionIcon instanceof WidgetStackView stackView) {
+            stackView.removeCurrentWidget(deleteFromDb);
             return true;
         }
         return false;
@@ -3180,6 +3194,32 @@ public class Launcher extends StatefulActivity<LauncherState>
             startActivity(intent);
         }
         return WidgetsFullSheet.show(this, true /* animated */);
+    }
+
+    private LauncherAppWidgetInfo mPendingStackWidget;
+    private WidgetStackInfo mPendingStackContainer;
+
+    public void startWidgetStackPicker(
+            @Nullable LauncherAppWidgetInfo widget,
+            @Nullable WidgetStackInfo stack) {
+        mPendingStackWidget = widget;
+        mPendingStackContainer = stack;
+        int targetSpanX = widget != null ? widget.spanX : (stack != null ? stack.spanX : 2);
+        int targetSpanY = widget != null ? widget.spanY : (stack != null ? stack.spanY : 2);
+        WidgetsFullSheet sheet = WidgetsFullSheet.show(this, true);
+        if (sheet != null) {
+            sheet.setStackTargetFilter(targetSpanX, targetSpanY, this::onWidgetSelectedForStack);
+        }
+    }
+
+    private void onWidgetSelectedForStack(PendingAddItemInfo info) {
+        if (mPendingStackWidget != null) {
+            mWorkspace.createWidgetStackFromPicker(mPendingStackWidget, info);
+            mPendingStackWidget = null;
+        } else if (mPendingStackContainer != null) {
+            mWorkspace.addWidgetToExistingStackFromPicker(mPendingStackContainer, info);
+            mPendingStackContainer = null;
+        }
     }
 
     /**

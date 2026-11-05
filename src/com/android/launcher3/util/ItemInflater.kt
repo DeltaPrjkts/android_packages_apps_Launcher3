@@ -35,6 +35,8 @@ import com.android.launcher3.model.data.FolderInfo
 import com.android.launcher3.model.data.ItemInfo
 import com.android.launcher3.model.data.ItemViewProvider
 import com.android.launcher3.model.data.LauncherAppWidgetInfo
+import com.android.launcher3.model.data.WidgetStackInfo
+import com.android.launcher3.widget.WidgetStackView
 import com.android.launcher3.model.data.WorkspaceItemFactory
 import com.android.launcher3.model.data.WorkspaceItemInfo
 import com.android.launcher3.views.ActivityContext
@@ -101,6 +103,14 @@ class ItemInflater<T>(
             Favorites.ITEM_TYPE_CUSTOM_APPWIDGET ->
                 inflateAppWidget(item as LauncherAppWidgetInfo, context.modelWriter)
 
+            Favorites.ITEM_TYPE_WIDGET_STACK ->
+                WidgetStackView.inflate(
+                    context,
+                    parent,
+                    item as WidgetStackInfo,
+                    this,
+                )
+
             else -> throw RuntimeException("Invalid Item Type")
         }
     }
@@ -130,6 +140,10 @@ class ItemInflater<T>(
             Favorites.CONTAINER_HOTSEAT -> favorite.verifyHighRes()
         }
         return favorite
+    }
+
+    fun inflateAppWidgetView(item: LauncherAppWidgetInfo): View? {
+        return inflateAppWidget(item, context.modelWriter)
     }
 
     private fun inflateAppWidget(item: LauncherAppWidgetInfo, writer: ModelWriter): View? {

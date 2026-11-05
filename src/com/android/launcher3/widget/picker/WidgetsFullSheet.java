@@ -71,6 +71,8 @@ import com.android.launcher3.views.StickyHeaderLayout;
 import com.android.launcher3.widget.BaseWidgetSheet;
 import com.android.launcher3.widget.WidgetCell;
 import com.android.launcher3.widget.model.WidgetsListBaseEntry;
+import com.android.launcher3.widget.model.WidgetsListContentEntry;
+import com.android.launcher3.widget.model.WidgetsListHeaderEntry;
 import com.android.launcher3.widget.picker.model.data.WidgetPickerData;
 import com.android.launcher3.widget.picker.search.SearchModeListener;
 import com.android.launcher3.widget.picker.search.WidgetsSearchBar;
@@ -524,6 +526,11 @@ public class WidgetsFullSheet extends BaseWidgetSheet
             widgets = getWidgetsToDisplay();
         }
 
+        if (mStackTargetSpanX > 0 && mStackTargetSpanY > 0) {
+            widgets = filterWidgetsForStack(widgets);
+            defaultWidgets = filterWidgetsForStack(defaultWidgets);
+        }
+
         AdapterHolder primaryUserAdapterHolder = mAdapters.get(AdapterHolder.PRIMARY);
         primaryUserAdapterHolder.mWidgetsListAdapter.setWidgets(widgets, defaultWidgets);
 
@@ -546,6 +553,43 @@ public class WidgetsFullSheet extends BaseWidgetSheet
             mIsNoWidgetsViewNeeded = isNoWidgetsViewNeeded;
             post(this::onRecommendedWidgetsBound);
         }
+    }
+
+    private int mStackTargetSpanX = -1;
+    private int mStackTargetSpanY = -1;
+
+    public void setStackTargetFilter(int spanX, int spanY, java.util.function.Consumer<com.android.launcher3.PendingAddItemInfo> onSelect) {
+        mStackTargetSpanX = spanX;
+        mStackTargetSpanY = spanY;
+        setStackSelectCallback(onSelect);
+        onWidgetsBound();
+    }
+
+    private List<WidgetsListBaseEntry> filterWidgetsForStack(List<WidgetsListBaseEntry> originalWidgets) {
+        if (mStackTargetSpanX <= 0 || mStackTargetSpanY <= 0) {
+            return originalWidgets;
+        }
+        List<WidgetsListBaseEntry> filtered = new ArrayList<>();
+        for (WidgetsListBaseEntry entry : originalWidgets) {
+            if (entry instanceof WidgetsListContentEntry contentEntry) {
+                List<WidgetItem> matchingItems = new ArrayList<>();
+                for (WidgetItem item : contentEntry.mWidgets) {
+                    if (item.spanX == mStackTargetSpanX && item.spanY == mStackTargetSpanY) {
+                        matchingItems.add(item);
+                    }
+                }
+                if (!matchingItems.isEmpty()) {
+                    filtered.add(new WidgetsListContentEntry(
+                            contentEntry.mPkgItem,
+                            contentEntry.mTitleSectionName,
+                            matchingItems,
+                            contentEntry.getMaxSpanSize()));
+                }
+            } else if (entry instanceof WidgetsListHeaderEntry) {
+                filtered.add(entry);
+            }
+        }
+        return filtered;
     }
 
     @Override

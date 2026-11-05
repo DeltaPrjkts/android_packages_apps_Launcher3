@@ -20,6 +20,7 @@ import android.content.Context
 import com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APPWIDGET
 import com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APP_PAIR
 import com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_FOLDER
+import com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_WIDGET_STACK
 import com.android.launcher3.dagger.ApplicationContext
 import com.android.launcher3.dagger.LauncherAppSingleton
 import com.android.launcher3.model.data.FolderInfo
@@ -119,6 +120,7 @@ constructor(
                     folderSystemShortcuts
                 }
             ITEM_TYPE_APP_PAIR -> appPairSystemShortcuts
+            ITEM_TYPE_WIDGET_STACK -> widgetSystemShortcuts
             ITEM_TYPE_APPWIDGET -> {
                 if (itemInfo is LauncherAppWidgetInfo) {
                     val launcherAppWidgetProviderInfo =
