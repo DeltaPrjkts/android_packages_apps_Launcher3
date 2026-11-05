@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.android.launcher3.allapps.CaddyIconView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:launcher="http://schemas.android.com/apk/res-auto"
+    style="@style/BaseIcon.AllApps"
+    android:padding="0dp"
+    android:importantForAccessibility="no"
+    launcher:iconDisplay="all_apps"
+    launcher:iconSizeOverride="22dp"
+    launcher:centerVertically="true" />

@@ -483,7 +483,19 @@ internal fun LayoutPreview(kind: String, variant: Int, modifier: Modifier = Modi
             else -> {
                 val home = kind == "home" || kind == "pref_app_drawer_style" && variant == 4
                 val sheet = kind == "pref_app_drawer_style" && variant == 0
-                if (home) {
+                val folders = kind == "caddy" && variant == 1
+                if (folders) {
+                    drawRoundRect(
+                        ink.copy(alpha = .16f),
+                        Offset(margin, h * .08f),
+                        Size(w - margin * 2, h * .18f),
+                        CornerRadius(8.dp.toPx()),
+                    )
+                    repeat(4) { dot ->
+                        drawCircle(ink, w * .045f, Offset(w * (.23f + dot * .18f), h * .17f))
+                    }
+                    pill(margin, h * .88f, w - margin * 2, h * .06f, accent)
+                } else if (home) {
                     pill(margin, h * .1f, w * .4f, h * .04f)
                     pill(margin, h * .18f, w * .55f, h * .025f, accent)
                     pill(margin * .7f, h * .87f, w - margin * 1.4f, h * .08f, accent)
@@ -492,7 +504,6 @@ internal fun LayoutPreview(kind: String, variant: Int, modifier: Modifier = Modi
                 }
                 if (sheet) pill(w * .4f, h * .035f, w * .2f, h * .02f, ink.copy(alpha = .4f))
                 val list = kind == "pref_app_drawer_style" && variant == 2
-                val folders = kind == "caddy" && variant == 1
                 val columns = if (list) 1 else if (folders) 2 else 4
                 val rowCount = if (folders) 2 else if (home) 3 else 4
                 repeat(rowCount) { row ->
@@ -506,13 +517,24 @@ internal fun LayoutPreview(kind: String, variant: Int, modifier: Modifier = Modi
                                 Size(w * .3f, h * .23f),
                                 CornerRadius(8.dp.toPx()),
                             )
-                            repeat(4) { dot ->
+                            pill(x + w * .04f, y + h * .025f, w * .16f, h * .014f)
+                            repeat(3) { dot ->
                                 drawCircle(
                                     ink,
                                     w * .035f,
                                     Offset(
                                         x + w * (.085f + dot % 2 * .13f),
-                                        y + h * (.06f + dot / 2 * .105f),
+                                        y + h * (.085f + dot / 2 * .09f),
+                                    ),
+                                )
+                            }
+                            repeat(4) { dot ->
+                                drawCircle(
+                                    ink,
+                                    w * .012f,
+                                    Offset(
+                                        x + w * (.185f + dot % 2 * .055f),
+                                        y + h * (.15f + dot / 2 * .045f),
                                     ),
                                 )
                             }

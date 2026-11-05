@@ -81,6 +81,7 @@ public abstract class AbstractFloatingView extends LinearLayout implements Touch
             TYPE_TASKBAR_OVERFLOW,
             TYPE_ICON_PICKER_BOTTOM_SHEET,
             TYPE_ICON_RESIZE_FRAME,
+            TYPE_CADDY_LIBRARY,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FloatingViewType {}
@@ -114,6 +115,7 @@ public abstract class AbstractFloatingView extends LinearLayout implements Touch
     public static final int TYPE_TASKBAR_OVERFLOW = 1 << 25;
     public static final int TYPE_ICON_PICKER_BOTTOM_SHEET = 1 << 16;
     public static final int TYPE_ICON_RESIZE_FRAME = 1 << 26;
+    public static final int TYPE_CADDY_LIBRARY = 1 << 27;
 
     public static final int TYPE_ALL = TYPE_FOLDER | TYPE_ACTION_POPUP
             | TYPE_WIDGETS_BOTTOM_SHEET | TYPE_WIDGET_RESIZE_FRAME | TYPE_WIDGETS_FULL_SHEET
@@ -124,7 +126,7 @@ public abstract class AbstractFloatingView extends LinearLayout implements Touch
             | TYPE_ADD_TO_HOME_CONFIRMATION | TYPE_TASKBAR_OVERLAY_PROXY
             | TYPE_TASKBAR_PINNING_POPUP | TYPE_PIN_IME_POPUP | TYPE_ONE_GRID_MIGRATION_EDU
             | TYPE_NUDGE | TYPE_TASKBAR_OVERFLOW | TYPE_ICON_PICKER_BOTTOM_SHEET
-            | TYPE_ICON_RESIZE_FRAME;
+            | TYPE_ICON_RESIZE_FRAME | TYPE_CADDY_LIBRARY;
 
     // Type of popups which should be kept open during launcher rebind
     public static final int TYPE_REBIND_SAFE = TYPE_WIDGETS_FULL_SHEET
@@ -143,7 +145,7 @@ public abstract class AbstractFloatingView extends LinearLayout implements Touch
     public static final int TYPE_STATUS_BAR_SWIPE_DOWN_DISALLOW = TYPE_WIDGETS_BOTTOM_SHEET |
             TYPE_WIDGETS_FULL_SHEET | TYPE_WIDGET_RESIZE_FRAME | TYPE_ON_BOARD_POPUP |
             TYPE_DISCOVERY_BOUNCE | TYPE_TASK_MENU | TYPE_DRAG_DROP_POPUP |
-            TYPE_ICON_PICKER_BOTTOM_SHEET | TYPE_ICON_RESIZE_FRAME;
+            TYPE_ICON_PICKER_BOTTOM_SHEET | TYPE_ICON_RESIZE_FRAME | TYPE_CADDY_LIBRARY;
 
     // Floating views that are exclusive to the taskbar overlay window.
     public static final int TYPE_TASKBAR_OVERLAYS =

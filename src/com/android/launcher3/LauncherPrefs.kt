@@ -300,6 +300,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField val DRAWER_OPEN_KEYBOARD = backedUpItem("pref_drawer_open_keyboard", false)
         @JvmField val DRAWER_SCROLLBAR = backedUpItem("pref_drawer_scrollbar", true)
         @JvmField val DRAWER_LIST = backedUpItem("pref_drawer_list", true)
+        @JvmField val CADDY_FAVORITES = backedUpItem("pref_caddy_favorites", "{}")
         @JvmField val SEARCH_SHORTCUTS = backedUpItem("pref_search_shortcuts", true)
         @JvmField val SEARCH_CONVERSATIONS = backedUpItem("pref_search_conversations", true)
         @JvmField val SEARCH_CONTACTS = backedUpItem("pref_search_contacts", false)

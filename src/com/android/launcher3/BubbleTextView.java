@@ -1974,7 +1974,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
                 && workspaceItem.iconSizeDp > 0;
     }
 
-    private int getIconSizeForItem(ItemInfoWithIcon info) {
+    protected int getIconSizeForItem(ItemInfoWithIcon info) {
         return hasCustomWorkspaceIconSize(info)
                 ? Math.min(getMaxCustomIconSizePx(),
                         Math.max(1, Math.round(((WorkspaceItemInfo) info).iconSizeDp

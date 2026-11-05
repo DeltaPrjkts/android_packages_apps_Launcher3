@@ -25,8 +25,6 @@ import static com.android.launcher3.allapps.SectionDecorationInfo.ROUND_BOTTOM_R
 import static com.android.launcher3.allapps.SectionDecorationInfo.ROUND_NOTHING;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_PRIVATE_SPACE_PREINSTALLED_APPS_COUNT;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_PRIVATE_SPACE_USER_INSTALLED_APPS_COUNT;
-import static com.android.launcher3.util.Executors.DATA_HELPER_EXECUTOR;
-import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 
 import android.content.Context;
 import android.text.Spannable;
@@ -43,9 +41,7 @@ import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.allapps.BaseAllAppsAdapter.AdapterItem;
 import com.android.launcher3.model.data.AppInfo;
-import com.android.launcher3.model.data.FolderInfo;
 import com.android.launcher3.model.data.ItemInfo;
-import com.android.launcher3.util.AppsListUtils;
 import com.android.launcher3.util.LabelComparator;
 import com.android.launcher3.views.ActivityContext;
 
@@ -244,8 +240,6 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
                 mPrivateProviderManager.getAnimationRunning())) {
             return;
         }
-        // Clear the package info cache to ensure fresh ApplicationInfo for new/updated apps
-        AppsListUtils.clearPackageInfoCache();
         // Sort the list of apps
         mApps.clear();
         mPrivateApps.clear();
@@ -325,15 +319,12 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
                                     R.string.work_profile_edu_section), 0));
                     Log.d(TAG, "Adding FastScrollSection for work edu card.");
                 }
-                // Check if default list view is enabled (DRAWER_LIST = true means list view, false means folders)
                 Context context = mActivityContext.asContext();
                 boolean useListViewModel = LauncherPrefs.INSTANCE.get(context).get(LauncherPrefs.DRAWER_LIST);
                 if (useListViewModel) {
-                    // Default list view - use regular alphabetical sections
-                position = addAppsWithSections(mApps, position);
+                    position = addAppsWithSections(mApps, position);
                 } else {
-                    // Categorized folders mode - use hybrid categorization
-                    position = addAppsHybrid(mApps, position);
+                    position = addAppLibrary(mApps, position);
                 }
             }
             if (Flags.enablePrivateSpace()) {
@@ -360,7 +351,12 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
             int rowIndex = -1;
             for (AdapterItem item : mAdapterItems) {
                 item.rowIndex = 0;
-                if (BaseAllAppsAdapter.isDividerViewType(item.viewType)
+                if (item.viewType == BaseAllAppsAdapter.VIEW_TYPE_CADDY_FAVORITES
+                        || item.viewType == BaseAllAppsAdapter.VIEW_TYPE_CADDY_CATEGORIES) {
+                    item.rowIndex = ++rowIndex;
+                    numAppsInSection = 0;
+                    numAppsInRow = 0;
+                } else if (BaseAllAppsAdapter.isDividerViewType(item.viewType)
                         || BaseAllAppsAdapter.isPrivateSpaceHeaderView(item.viewType)
                         || BaseAllAppsAdapter.isPrivateSpaceSysAppsDividerView(item.viewType)) {
                     numAppsInSection = 0;
@@ -379,23 +375,8 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
         }
 
         if (mAdapter != null) {
-            if (mAllAppsStore == null) {
-                DiffUtil.calculateDiff(new MyDiffCallback(oldItems,
-                        new ArrayList<>(mAdapterItems)), false).dispatchUpdatesTo(mAdapter);
-            } else {
-                final List<AdapterItem> oldItemsSnapshot = oldItems;
-                final List<AdapterItem> newItemsSnapshot = new ArrayList<>(mAdapterItems);
-                DATA_HELPER_EXECUTOR.execute(() -> {
-                    DiffUtil.DiffResult diffResult =
-                            DiffUtil.calculateDiff(
-                                    new MyDiffCallback(oldItemsSnapshot, newItemsSnapshot), false);
-                    MAIN_EXECUTOR.execute(() -> {
-                        if (mAdapter != null) {
-                            diffResult.dispatchUpdatesTo(mAdapter);
-                        }
-                    });
-                });
-            }
+            DiffUtil.calculateDiff(new MyDiffCallback(oldItems,
+                    new ArrayList<>(mAdapterItems)), false).dispatchUpdatesTo(mAdapter);
         }
     }
 
@@ -529,42 +510,20 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
         return position;
     }
 
-    /**
-     * Adds apps in hybrid mode: folders for categories with 2+ apps at the top,
-     * individual apps below in regular list format.
-     *
-     * @param appList List of apps to add
-     * @param startPosition Starting position for adapter items
-     * @return Final position after adding all items
-     */
-    protected int addAppsHybrid(List<AppInfo> appList, int startPosition) {
+    private int addAppLibrary(List<AppInfo> appList, int startPosition) {
         if (appList == null || appList.isEmpty()) {
             return startPosition;
         }
 
         Context context = mActivityContext.asContext();
-        AppsListUtils.HybridCategorizationResult result =
-                AppsListUtils.categorizeAppsHybrid(context, appList);
-
-        int position = startPosition;
-
-        // Add folders for categories with 2+ apps at the top
-        for (Map.Entry<String, List<AppInfo>> entry : result.folders.entrySet()) {
-            FolderInfo folderInfo = new FolderInfo();
-            folderInfo.title = entry.getKey();
-            folderInfo.container = ItemInfo.NO_ID; // Mark as app drawer folder
-            
-            for (AppInfo app : entry.getValue()) {
-                folderInfo.add(app);
-            }
-            
-            mAdapterItems.add(AdapterItem.asFolder(folderInfo));
+        mAdapterItems.add(AdapterItem.asCaddyFavorites(appList,
+                CaddyAppLibrary.suggestions(context, appList)));
+        int position = startPosition + 1;
+        List<CaddyAppLibrary.Category> categories = CaddyAppLibrary.categories(context, appList);
+        for (int i = 0; i < categories.size(); i += 2) {
+            mAdapterItems.add(AdapterItem.asCaddyCategories(
+                    categories.subList(i, Math.min(i + 2, categories.size()))));
             position++;
-        }
-
-        // Add individual apps below in regular list format
-        if (!result.individualApps.isEmpty()) {
-            position = addAppsWithSections(result.individualApps, position);
         }
 
         return position;

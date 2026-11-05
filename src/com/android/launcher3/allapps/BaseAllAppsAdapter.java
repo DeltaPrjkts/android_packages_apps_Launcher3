@@ -85,7 +85,9 @@ public abstract class BaseAllAppsAdapter
     public static final int VIEW_TYPE_SEARCH_TOP_RESULT = 1 << 14;
     public static final int VIEW_TYPE_SEARCH_FILTERS = 1 << 15;
     public static final int VIEW_TYPE_SEARCH_THUMBNAILS = 1 << 16;
-    public static final int NEXT_ID = 17;
+    public static final int VIEW_TYPE_CADDY_FAVORITES = 1 << 17;
+    public static final int VIEW_TYPE_CADDY_CATEGORIES = 1 << 18;
+    public static final int NEXT_ID = 19;
 
     // Common view type masks
     public static final int VIEW_TYPE_MASK_DIVIDER = VIEW_TYPE_ALL_APPS_DIVIDER;
@@ -133,6 +135,9 @@ public abstract class BaseAllAppsAdapter
         public int searchSection = -1;
         public UniversalSearchResults.Filters searchFilters = null;
         public List<UniversalSearchResult> searchThumbnails = null;
+        public List<CaddyAppLibrary.Category> caddyCategories = List.of();
+        public List<AppInfo> caddyApps = List.of();
+        public List<AppInfo> caddySuggestions = List.of();
         public AdapterItem(int viewType) {
             this.viewType = viewType;
         }
@@ -176,6 +181,19 @@ public abstract class BaseAllAppsAdapter
             return item;
         }
 
+        public static AdapterItem asCaddyFavorites(List<AppInfo> apps, List<AppInfo> suggestions) {
+            AdapterItem item = new AdapterItem(VIEW_TYPE_CADDY_FAVORITES);
+            item.caddyApps = List.copyOf(apps);
+            item.caddySuggestions = suggestions;
+            return item;
+        }
+
+        public static AdapterItem asCaddyCategories(List<CaddyAppLibrary.Category> categories) {
+            AdapterItem item = new AdapterItem(VIEW_TYPE_CADDY_CATEGORIES);
+            item.caddyCategories = List.copyOf(categories);
+            return item;
+        }
+
         public static AdapterItem asFolder(FolderInfo folderInfo) {
             AdapterItem item = new AdapterItem(VIEW_TYPE_FOLDER);
             item.folderInfo = folderInfo;
@@ -193,6 +211,8 @@ public abstract class BaseAllAppsAdapter
 
         protected boolean isCountedForAccessibility() {
             return viewType == VIEW_TYPE_ICON || viewType == VIEW_TYPE_FOLDER
+                    || viewType == VIEW_TYPE_CADDY_FAVORITES
+                    || viewType == VIEW_TYPE_CADDY_CATEGORIES
                     || viewType == VIEW_TYPE_SEARCH_RESULT_ROW
                     || viewType == VIEW_TYPE_SEARCH_TOP_RESULT;
         }
@@ -237,6 +257,9 @@ public abstract class BaseAllAppsAdapter
          * as well. Returning true will prevent redrawing of thee item.
          */
         public boolean isContentSame(AdapterItem other) {
+            if (viewType == VIEW_TYPE_CADDY_FAVORITES || viewType == VIEW_TYPE_CADDY_CATEGORIES) {
+                return false;
+            }
             if (viewType == VIEW_TYPE_SEARCH_RESULT_ROW || viewType == VIEW_TYPE_SEARCH_TOP_RESULT
                     || viewType == VIEW_TYPE_SEARCH_FILTERS
                     || viewType == VIEW_TYPE_SEARCH_THUMBNAILS) {
@@ -321,6 +344,9 @@ public abstract class BaseAllAppsAdapter
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         switch (viewType) {
+            case VIEW_TYPE_CADDY_FAVORITES:
+            case VIEW_TYPE_CADDY_CATEGORIES:
+                return new ViewHolder(new CaddyRowView(mActivityContext.asContext()));
             case VIEW_TYPE_ICON:
                 return new ViewHolder(getIconOnCreateSetup(parent));
             case VIEW_TYPE_PRIVATE_SPACE_APP_ICON:
@@ -383,6 +409,11 @@ public abstract class BaseAllAppsAdapter
     public void onBindViewHolder(ViewHolder holder, int position) {
         holder.itemView.setVisibility(View.VISIBLE);
         switch (holder.getItemViewType()) {
+            case VIEW_TYPE_CADDY_FAVORITES:
+            case VIEW_TYPE_CADDY_CATEGORIES:
+                ((CaddyRowView) holder.itemView).bind(mApps.getAdapterItems().get(position),
+                        mIconFocusListener, mApps::updateAdapterItems);
+                break;
             case VIEW_TYPE_PRIVATE_SPACE_APP_ICON:
             case VIEW_TYPE_ICON: {
                 AdapterItem adapterItem = mApps.getAdapterItems().get(position);

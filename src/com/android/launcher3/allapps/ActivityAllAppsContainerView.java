@@ -178,6 +178,7 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     /** {@code true} when rendered view is in search state instead of the scroll state. */
     private boolean mIsSearching;
     private String mAppDrawerStyle = AppDrawerStyle.NORMAL;
+    private boolean mIsAppLibrary;
     private boolean mShowFastScroller;
     private PageIndicatorDots mOneUiPageIndicator;
     @Nullable private OneUiPagedAllAppsView mOneUiPagedView;
@@ -648,14 +649,17 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
 
     protected void rebindAdapters(boolean force) {
         Log.d(TAG, "rebindAdapters: force: " + force);
-        String previousStyle = mAppDrawerStyle;
-        updateAppDrawerStyle();
-        force |= !previousStyle.equals(mAppDrawerStyle);
-        force |= AppDrawerStyle.isVerticalPaged(mAppDrawerStyle);
         if (mSearchTransitionController.isRunning()) {
             mRebindAdaptersAfterSearchAnimation = true;
             return;
         }
+        force |= mRebindAdaptersAfterSearchAnimation;
+        String previousStyle = mAppDrawerStyle;
+        boolean wasAppLibrary = mIsAppLibrary;
+        updateAppDrawerStyle();
+        force |= !previousStyle.equals(mAppDrawerStyle);
+        force |= wasAppLibrary != mIsAppLibrary;
+        force |= AppDrawerStyle.isVerticalPaged(mAppDrawerStyle);
         updateSearchResultsVisibility();
         updateAppsPerRowState(mActivityContext.getDeviceProfile(), force);
 
@@ -1637,10 +1641,12 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
 
     private void updateAppDrawerStyle() {
         mAppDrawerStyle = AppDrawerStyle.get(getContext());
+        mIsAppLibrary = !LauncherPrefs.DRAWER_LIST.get(getContext());
     }
 
     private boolean shouldShowFastScroller() {
-        if (!LauncherPrefs.DRAWER_SCROLLBAR.get(getContext())) {
+        if (!LauncherPrefs.DRAWER_SCROLLBAR.get(getContext())
+                || !LauncherPrefs.DRAWER_LIST.get(getContext())) {
             return false;
         }
         return !AppDrawerStyle.isVerticalPaged(mAppDrawerStyle)
@@ -1759,7 +1765,8 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
      * Returns true if the container has work apps.
      */
     public boolean shouldShowTabs() {
-        return mHasWorkApps && AppDrawerStyle.isNormal(mAppDrawerStyle);
+        return mHasWorkApps && (AppDrawerStyle.isNormal(mAppDrawerStyle)
+                || !LauncherPrefs.DRAWER_LIST.get(getContext()));
     }
 
     // Used by tests only
@@ -2153,9 +2160,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
             onInitializeRecyclerView(mRecyclerView);
             // Use ViewGroupFocusHelper for SearchRecyclerView to draw focus outline for the
             // buttons in the view (e.g. query builder button and setting button)
-            FocusedItemDecorator focusedItemDecorator = isSearch() ? new FocusedItemDecorator(
-                    new ViewGroupFocusHelper(mRecyclerView)) : new FocusedItemDecorator(
-                    mRecyclerView);
+            FocusedItemDecorator focusedItemDecorator = (isSearch() || mIsAppLibrary)
+                    ? new FocusedItemDecorator(new ViewGroupFocusHelper(mRecyclerView))
+                    : new FocusedItemDecorator(mRecyclerView);
             mRecyclerView.addItemDecoration(focusedItemDecorator);
             mOnFocusChangeListener = focusedItemDecorator.getFocusListener();
             mAdapter.setIconFocusListener(mOnFocusChangeListener);

@@ -496,9 +496,9 @@
 
     <!-- Drawer list preference -->
     <string name="drawer_list_title">Layout</string>
-    <string name="drawer_list_summary">Choose between default list view or categorized folders (Caddy)</string>
+    <string name="drawer_list_summary">Choose the default app list or an app library with category folders and favorite apps</string>
     <string name="feed_default">Default</string>
-    <string name="caddy_beta">Caddy (Beta)</string>
+    <string name="caddy_beta">App library</string>
 
     <!-- Wallpaper carousel -->
     <string name="wallpaper_carousel_title">Wallpaper carousel</string>

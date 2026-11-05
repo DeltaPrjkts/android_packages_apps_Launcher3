@@ -32,6 +32,14 @@ public final class AppDrawerStyle {
 
     public static String get(Context context) {
         String style = LauncherPrefs.APP_DRAWER_STYLE.get(context);
+        if (!LauncherPrefs.DRAWER_LIST.get(context)) {
+            if (VERTICAL_PAGED.equals(style)) {
+                return FULLSCREEN;
+            }
+            if (HORIZONTAL_LIST.equals(style)) {
+                return NORMAL;
+            }
+        }
         return isSupported(style) ? style : NORMAL;
     }
 

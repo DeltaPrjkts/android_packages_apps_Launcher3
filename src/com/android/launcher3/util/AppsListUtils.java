@@ -7,11 +7,9 @@ package com.android.launcher3.util;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 
 import com.android.launcher3.R;
 import com.android.launcher3.model.data.AppInfo;
-import com.android.launcher3.util.ApplicationInfoWrapper;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -26,7 +24,65 @@ import java.util.TreeMap;
  */
 public class AppsListUtils {
 
-    private static final Map<String, ApplicationInfo> sPackageInfoCache = new java.util.HashMap<>();
+    private static final Map<PackageUserKey, ApplicationInfo> sPackageInfoCache =
+            new java.util.HashMap<>();
+
+    private static final Map<String, Integer> LIBRARY_CATEGORIES = new java.util.HashMap<>();
+
+    static {
+        addLibraryPackages(R.string.caddy_utilities,
+                "com.android.settings", "com.android.vending", "com.android.chrome",
+                "com.android.calculator2", "com.google.android.calculator", "com.android.deskclock",
+                "com.google.android.deskclock", "com.google.android.googlequicksearchbox",
+                "com.google.android.apps.nbu.files", "com.android.documentsui",
+                "com.google.android.documentsui", "org.mozilla.firefox", "com.brave.browser",
+                "com.sec.android.app.sbrowser", "com.microsoft.emmx", "com.android.camera2",
+                "com.android.camera", "com.google.android.GoogleCamera", "org.lineageos.aperture");
+        addLibraryPackages(R.string.social_category_label,
+                "com.google.android.dialer", "com.android.dialer", "com.android.contacts",
+                "com.google.android.contacts", "com.google.android.apps.messaging",
+                "com.android.messaging", "org.thoughtcrime.securesms", "com.whatsapp.w4b",
+                "com.google.android.gm", "com.microsoft.office.outlook", "com.buz.app");
+        addLibraryPackages(R.string.caddy_games,
+                "com.firsttouchgames.dls7", "com.kiloo.subwaysurf", "com.roblox.client",
+                "com.mojang.minecraftpe", "com.supercell.clashofclans", "com.supercell.clashroyale",
+                "com.supercell.brawlstars", "com.pubg.imobile", "com.tencent.ig",
+                "com.dts.freefireth", "com.dts.freefiremax", "com.activision.callofduty.shooter",
+                "com.valvesoftware.android.steam.community", "com.epicgames.portal");
+        addLibraryPackages(R.string.caddy_lifestyle,
+                "com.application.zomato", "com.application.zomato.district", "in.swiggy.android",
+                "com.grofers.customerapp", "com.zeptoconsumerapp", "com.phonegap.rxpal",
+                "com.amazon.mShop.android.shopping", "com.flipkart.android", "com.myntra.android",
+                "com.ubercab", "com.olacabs.customer",
+                "com.Dominos", "com.strava", "com.google.android.apps.fitness",
+                "com.sec.android.app.shealth", "com.nike.plusgps", "com.nike.omega");
+        addLibraryPackages(R.string.caddy_finance,
+                "com.google.android.apps.nbu.paisa.user", "com.phonepe.app", "net.one97.paytm",
+                "com.paypal.android.p2pmobile", "com.revolut.revolut", "com.nextbillion.groww",
+                "com.zerodha.kite3", "com.dreamplug.androidapp",
+                "com.google.android.apps.walletnfcrel", "com.mobikwik_new", "com.freecharge.android",
+                "com.axis.mobile", "com.sbi.lotusintouch", "com.csam.icici.bank.imobile",
+                "com.snapwork.hdfc", "com.myairtelapp", "com.jio.myjio", "com.mventus.selfcare.activity");
+        addLibraryPackages(R.string.productivity_category_label,
+                "com.google.android.calendar", "com.android.calendar", "com.google.android.keep",
+                "com.google.android.apps.docs", "com.google.android.apps.docs.editors.docs",
+                "com.google.android.apps.docs.editors.sheets", "com.google.android.apps.docs.editors.slides");
+        addLibraryPackages(R.string.caddy_entertainment,
+                "com.jio.media.ondemand", "in.startv.hotstar", "com.jio.media.jiobeats",
+                "com.bsbportal.music", "com.apple.android.music");
+        addLibraryPackages(R.string.caddy_multimedia,
+                "com.google.android.apps.photos", "com.android.gallery3d", "org.lineageos.gallery",
+                "com.niksoftware.snapseed", "com.canva.editor", "com.lemon.lvoverseas");
+        addLibraryPackages(R.string.caddy_travel,
+                "com.google.android.apps.maps", "com.waze", "com.here.app.maps",
+                "net.osmand", "net.osmand.plus", "com.mapswithme.maps.pro");
+    }
+
+    private static void addLibraryPackages(int category, String... packages) {
+        for (String packageName : packages) {
+            LIBRARY_CATEGORIES.put(packageName.toLowerCase(Locale.ROOT), category);
+        }
+    }
     
     /**
      * Clears the package info cache. Should be called when apps are updated/installed
@@ -182,14 +238,16 @@ public class AppsListUtils {
             }
 
             String packageName = appInfo.getTargetPackage();
-            ApplicationInfo applicationInfo = sPackageInfoCache.get(packageName);
+            String packageBasedCategory = getCategoryByPackage(packageName, context);
+            PackageUserKey key = new PackageUserKey(packageName, appInfo.user);
+            ApplicationInfo applicationInfo = sPackageInfoCache.get(key);
             
-            if (applicationInfo == null) {
+            if (applicationInfo == null && packageBasedCategory == null) {
                 try {
                     applicationInfo = new ApplicationInfoWrapper(
                             context, packageName, appInfo.user).getInfo();
                     if (applicationInfo != null) {
-                        sPackageInfoCache.put(packageName, applicationInfo);
+                        sPackageInfoCache.put(key, applicationInfo);
                     }
                 } catch (Exception e) {
                     // Package not found or inaccessible
@@ -199,14 +257,16 @@ public class AppsListUtils {
             String categoryTitle = othersLabel;
             
             // First, try to categorize by package name (most reliable)
-            String packageBasedCategory = getCategoryByPackage(packageName, context);
             if (packageBasedCategory != null) {
                 categoryTitle = packageBasedCategory;
-            } else if (applicationInfo != null && applicationInfo.category != 0) {
+            } else if (applicationInfo != null) {
                 // Fall back to ApplicationInfo.category if package name didn't match
-                categoryTitle = getCategoryTitle(context, applicationInfo.category);
+                categoryTitle = getCategoryTitle(context,
+                        (applicationInfo.flags & ApplicationInfo.FLAG_IS_GAME) != 0
+                                ? ApplicationInfo.CATEGORY_GAME : applicationInfo.category);
                 if (categoryTitle == null) {
-                    categoryTitle = othersLabel;
+                    categoryTitle = (applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
+                            ? context.getString(R.string.caddy_utilities) : othersLabel;
                 }
             }
 
@@ -379,6 +439,10 @@ public class AppsListUtils {
         // Use Locale.ROOT for package name comparison as package names are locale-independent
         // Trim to handle any potential whitespace issues
         String lowerPackageName = packageName.trim().toLowerCase(Locale.ROOT);
+        Integer libraryCategory = LIBRARY_CATEGORIES.get(lowerPackageName);
+        if (libraryCategory != null) {
+            return context.getString(libraryCategory);
+        }
         
         // Check each category's package set (order matters - check most specific first)
         // Check SOCIAL before IMAGE since some apps like Instagram/Pinterest are in both
@@ -392,13 +456,13 @@ public class AppsListUtils {
             return context.getString(R.string.news_category_label);
         }
         if (AUDIO_PACKAGES.contains(lowerPackageName)) {
-            return context.getString(R.string.audio_category_label);
+            return context.getString(R.string.caddy_entertainment);
         }
         if (VIDEO_PACKAGES.contains(lowerPackageName)) {
-            return context.getString(R.string.video_category_label);
+            return context.getString(R.string.caddy_entertainment);
         }
         if (IMAGE_PACKAGES.contains(lowerPackageName)) {
-            return context.getString(R.string.image_category_label);
+            return context.getString(R.string.caddy_multimedia);
         }
         
         return null;
@@ -416,6 +480,12 @@ public class AppsListUtils {
         // Map ApplicationInfo category constants to localized string resources
         // These constants are defined in ApplicationInfo but may vary by Android version
         switch (category) {
+            case ApplicationInfo.CATEGORY_GAME:
+                return context.getString(R.string.caddy_games);
+            case ApplicationInfo.CATEGORY_MAPS:
+                return context.getString(R.string.caddy_travel);
+            case ApplicationInfo.CATEGORY_ACCESSIBILITY:
+                return context.getString(R.string.caddy_utilities);
             case ApplicationInfo.CATEGORY_UNDEFINED:
                 return null; // Will fall back to "Others"
             case ApplicationInfo.CATEGORY_PRODUCTIVITY:
@@ -425,11 +495,10 @@ public class AppsListUtils {
             case ApplicationInfo.CATEGORY_SOCIAL:
                 return context.getString(R.string.social_category_label);
             case ApplicationInfo.CATEGORY_AUDIO:
-                return context.getString(R.string.audio_category_label);
             case ApplicationInfo.CATEGORY_VIDEO:
-                return context.getString(R.string.video_category_label);
+                return context.getString(R.string.caddy_entertainment);
             case ApplicationInfo.CATEGORY_IMAGE:
-                return context.getString(R.string.image_category_label);
+                return context.getString(R.string.caddy_multimedia);
             default:
                 // For unknown categories, return null to fall back to "Others"
                 // This allows for future Android versions with new categories to be handled gracefully

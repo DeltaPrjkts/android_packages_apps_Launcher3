@@ -141,16 +141,38 @@
                 <LinearLayout
                     android:id="@+id/caddy_illustration"
                     android:layout_width="104dp"
-                    android:layout_height="76dp"
+                    android:layout_height="88dp"
                     android:gravity="center"
                     android:orientation="vertical">
                     
-                    <!-- Search bar -->
-                    <View
+                    <LinearLayout
                         android:layout_width="104dp"
                         android:layout_height="24dp"
                         android:layout_marginBottom="8dp"
-                        android:background="@drawable/preference_caddy_search_bar" />
+                        android:background="@drawable/preference_caddy_search_bar"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+                        <View
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginHorizontal="5dp"
+                            android:background="@drawable/preference_caddy_circle" />
+                        <View
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginHorizontal="5dp"
+                            android:background="@drawable/preference_caddy_circle" />
+                        <View
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginHorizontal="5dp"
+                            android:background="@drawable/preference_caddy_circle" />
+                        <View
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_marginHorizontal="5dp"
+                            android:background="@drawable/preference_caddy_circle" />
+                    </LinearLayout>
                     
                     <!-- Folder groups -->
                     <LinearLayout

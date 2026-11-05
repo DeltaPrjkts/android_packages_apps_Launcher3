@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="caddy_utilities">Utilities</string>
+    <string name="caddy_games">Games</string>
+    <string name="caddy_lifestyle">Lifestyle</string>
+    <string name="caddy_finance">Finance</string>
+    <string name="caddy_entertainment">Entertainment</string>
+    <string name="caddy_multimedia">Multimedia</string>
+    <string name="caddy_travel">Travel</string>
+    <string name="caddy_favorites">Favorite apps</string>
+    <string name="caddy_edit_favorites">Edit favorite apps</string>
+    <string name="caddy_hold_to_edit">Touch and hold to edit favorite apps</string>
+    <string name="caddy_choose_favorites">Choose up to four apps. Empty places show random apps.</string>
+    <string name="caddy_favorites_count">%1$d of 4 selected</string>
+    <string name="caddy_favorites_limit">Choose up to four apps</string>
+    <string name="caddy_use_random">Use random apps</string>
+    <string name="caddy_search_apps">Search apps</string>
+    <string name="caddy_no_apps">No matching apps</string>
+    <string name="caddy_close">Close</string>
+    <string name="caddy_save">Save</string>
+    <string name="caddy_open_category">Open %1$s, %2$d apps</string>
+</resources>

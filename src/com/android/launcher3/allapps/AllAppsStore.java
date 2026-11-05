@@ -33,6 +33,7 @@ import com.android.launcher3.icons.FastBitmapDrawable;
 import com.android.launcher3.model.data.AppInfo;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.ItemInfoWithIcon;
+import com.android.launcher3.util.AppsListUtils;
 import com.android.launcher3.util.ComponentKey;
 import com.android.launcher3.util.PackageUserKey;
 
@@ -91,6 +92,7 @@ public class AllAppsStore {
      */
     public void setApps(@Nullable AppInfo[] apps, int flags, Map<PackageUserKey, Integer> map) {
         mApps = apps == null ? EMPTY_ARRAY : apps;
+        AppsListUtils.clearPackageInfoCache();
         Log.d(TAG, "setApps: apps.length=" + mApps.length);
         mModelFlags = flags;
         notifyUpdate();
@@ -221,14 +223,17 @@ public class AllAppsStore {
 
     private void updateAllIcons(Consumer<BubbleTextView> action) {
         for (int i = mIconContainers.size() - 1; i >= 0; i--) {
-            ViewGroup parent = mIconContainers.get(i);
-            int childCount = parent.getChildCount();
+            updateIcons(mIconContainers.get(i), action);
+        }
+    }
 
-            for (int j = 0; j < childCount; j++) {
-                View child = parent.getChildAt(j);
-                if (child instanceof BubbleTextView) {
-                    action.accept((BubbleTextView) child);
-                }
+    private void updateIcons(ViewGroup parent, Consumer<BubbleTextView> action) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof BubbleTextView icon) {
+                action.accept(icon);
+            } else if (child instanceof ViewGroup group) {
+                updateIcons(group, action);
             }
         }
     }

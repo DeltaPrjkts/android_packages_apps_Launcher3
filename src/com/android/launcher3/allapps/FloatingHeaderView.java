@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.Flags;
 import com.android.launcher3.Insettable;
+import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.allapps.ActivityAllAppsContainerView.AdapterHolder;
 import com.android.launcher3.util.PluginManagerWrapper;
@@ -105,6 +106,7 @@ public class FloatingHeaderView extends LinearLayout implements
     private boolean mHeaderCollapsed;
     // Whether floating rows like predicted apps are hidden.
     private boolean mFloatingRowsCollapsed;
+    private boolean mAppLibrary;
     // Total height of all current floating rows. Collapsed rows == 0 height.
     private int mFloatingRowsHeight;
     // Offset of search bar. Adds to the floating view height when multi-line is supported.
@@ -229,6 +231,9 @@ public class FloatingHeaderView extends LinearLayout implements
 
     @Override
     public View getFocusedChild() {
+        if (mAppLibrary) {
+            return null;
+        }
         for (FloatingHeaderRow row : mAllRows) {
             if (row.hasVisibleContent() && row.isVisible()) {
                 return row.getFocusedChild();
@@ -239,6 +244,12 @@ public class FloatingHeaderView extends LinearLayout implements
 
     void setup(AllAppsRecyclerView mainRV, AllAppsRecyclerView workRV, SearchRecyclerView searchRV,
             int activeRV, boolean tabsHidden) {
+        boolean appLibrary = !LauncherPrefs.DRAWER_LIST.get(getContext());
+        if (mAppLibrary != appLibrary) {
+            mAppLibrary = appLibrary;
+            requestLayout();
+        }
+        updateExpectedHeight();
         for (FloatingHeaderRow row : mAllRows) {
             row.setup(this, mAllRows, tabsHidden);
         }
@@ -250,6 +261,38 @@ public class FloatingHeaderView extends LinearLayout implements
         mSearchRV = searchRV;
         setActiveRV(activeRV);
         reset(false);
+    }
+
+    @Override
+    protected void onMeasure(int widthSpec, int heightSpec) {
+        super.onMeasure(widthSpec, heightSpec);
+        if (mAppLibrary) {
+            MarginLayoutParams params = (MarginLayoutParams) mTabLayout.getLayoutParams();
+            int tabsHeight = mTabLayout.getVisibility() == GONE ? 0
+                    : mTabLayout.getMeasuredHeight() + params.topMargin + params.bottomMargin;
+            setMeasuredDimension(getMeasuredWidth(), resolveSize(
+                    getPaddingTop() + tabsHeight + getPaddingBottom(), heightSpec));
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        if (!mAppLibrary) {
+            super.onLayout(changed, left, top, right, bottom);
+            return;
+        }
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child == mTabLayout && child.getVisibility() != GONE) {
+                MarginLayoutParams params = (MarginLayoutParams) child.getLayoutParams();
+                int childTop = getPaddingTop() + params.topMargin;
+                int childLeft = getPaddingLeft() + params.leftMargin;
+                child.layout(childLeft, childTop, childLeft + child.getMeasuredWidth(),
+                        childTop + child.getMeasuredHeight());
+            } else {
+                child.layout(0, 0, 0, 0);
+            }
+        }
     }
 
     /** Whether this header has been set up previously. */
@@ -346,7 +389,8 @@ public class FloatingHeaderView extends LinearLayout implements
         int uncappedTranslationY = mTranslationY;
         mTranslationY = Math.max(mTranslationY, -mMaxTranslation);
 
-        if (mFloatingRowsCollapsed || uncappedTranslationY < mTranslationY - getPaddingTop()) {
+        if (mFloatingRowsCollapsed || mAppLibrary
+                || uncappedTranslationY < mTranslationY - getPaddingTop()) {
             // we hide it completely if already capped (for opening search anim)
             for (FloatingHeaderRow row : mAllRows) {
                 row.setVerticalScroll(0, true /* isScrolledOut */);
@@ -364,7 +408,7 @@ public class FloatingHeaderView extends LinearLayout implements
             // Add back spacing that is otherwise covered by the tabs.
             clipTop += mTabsAdditionalPaddingTop;
         }
-        mRVClip.top = mTabsHidden || mFloatingRowsCollapsed ? clipTop : 0;
+        mRVClip.top = mTabsHidden || mFloatingRowsCollapsed || mAppLibrary ? clipTop : 0;
         mHeaderClip.top = clipTop;
         // clipping on a draw might cause additional redraw
         setClipBounds(mHeaderClip);
@@ -431,7 +475,8 @@ public class FloatingHeaderView extends LinearLayout implements
     /** Calculates the combined height of any floating rows (e.g. predicted apps, app divider). */
     private void updateFloatingRowsHeight() {
         mFloatingRowsHeight =
-                Arrays.stream(mAllRows).mapToInt(FloatingHeaderRow::getExpectedHeight).sum();
+                mAppLibrary ? 0
+                        : Arrays.stream(mAllRows).mapToInt(FloatingHeaderRow::getExpectedHeight).sum();
     }
 
     /** Gets the combined height of any floating rows (e.g. predicted apps, app divider). */
