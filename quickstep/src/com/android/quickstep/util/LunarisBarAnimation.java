@@ -60,6 +60,15 @@ public final class LunarisBarAnimation {
     }
 
     public static float getWindowAlpha(float progress) {
-        return Math.max(0f, Math.min(1f, (1f - progress) / 0.15f));
+        if (progress <= 0.84f) return 1f;
+        if (progress >= 0.99f) return 0f;
+        float p = (progress - 0.84f) / 0.15f;
+        return (1f - p) * (1f - p);
+    }
+
+    public static float getCornerRadius(float startRadius, float endRadius, float progress) {
+        float p = Math.max(0f, Math.min(1f, progress));
+        float curved = 1f - (1f - p) * (1f - p);
+        return startRadius + curved * (endRadius - startRadius);
     }
 }

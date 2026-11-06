@@ -142,9 +142,15 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 }
 
                 @Override
+                public boolean shouldUseCosCloseAnimation() {
+                    return true;
+                }
+
+                @Override
                 protected float getWindowCornerRadius(float progress) {
                     float startRadius = QuickStepContract.getWindowCornerRadius(mContainer);
-                    return startRadius + progress * (islandTarget.height() / 2f - startRadius);
+                    return LunarisBarAnimation.getCornerRadius(
+                            startRadius, islandTarget.height() / 2f, progress);
                 }
 
                 @Override

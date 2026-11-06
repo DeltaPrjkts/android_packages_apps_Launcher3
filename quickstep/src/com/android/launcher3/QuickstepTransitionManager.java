@@ -2088,7 +2088,9 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 && !isTransluscent
                 && !mDeviceProfile.getDeviceProperties().isTablet()
                 && !mDeviceProfile.isTaskbarPresent;
-        final boolean useCosSpring = mCosAppAnimations && floatingIconView != null && !isTransluscent;
+        final boolean useCosSpring = mCosAppAnimations
+                && (floatingIconView != null || islandTarget != null)
+                && !isTransluscent;
         RectFSpringAnim anim = new RectFSpringAnim(useCosSpring
                 ? new RectFSpringAnim.CosSpringConfig(mLauncher, mDeviceProfile,
                         closingWindowStartRectF, targetRect)
@@ -2220,8 +2222,8 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
                 @Override
                 public float getCornerRadius(float progress) {
-                    return startWindowCornerRadius
-                            + progress * (islandTarget.height() / 2f - startWindowCornerRadius);
+                    return LunarisBarAnimation.getCornerRadius(
+                            startWindowCornerRadius, islandTarget.height() / 2f, progress);
                 }
             });
         } else {
