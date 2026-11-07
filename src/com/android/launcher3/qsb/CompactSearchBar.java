@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -19,6 +20,7 @@ import android.view.CrossWindowBlurListeners;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.axion.blur.ui.view.AxViewBackdropBlur;
@@ -159,6 +161,7 @@ public class CompactSearchBar extends FrameLayout
         super.onWindowVisibilityChanged(visibility);
         if (visibility == VISIBLE) {
             updateBlurPreferences();
+            setIcon();
             setUpBackground();
             postInvalidate();
         } else {
@@ -242,11 +245,13 @@ public class CompactSearchBar extends FrameLayout
         boolean isThemed = LauncherPrefs.DOCK_THEME.get(mContext);
         switch (getAction()) {
             case ACTION_LENS:
+                mActionIcon.setImageTintList(null);
                 mActionIcon.setImageResource(isThemed
                         ? R.drawable.ic_lens_themed
                         : R.drawable.ic_lens_color);
                 break;
             case ACTION_MIC:
+                mActionIcon.setImageTintList(null);
                 if (Utilities.isMusicSearchEnabled(mContext)) {
                     mActionIcon.setImageResource(isThemed
                             ? R.drawable.ic_music_themed
@@ -258,13 +263,24 @@ public class CompactSearchBar extends FrameLayout
                 }
                 break;
             case ACTION_GEMINI:
-            case ACTION_UNIVERSAL_SEARCH:
+                mActionIcon.setImageTintList(null);
                 mActionIcon.setImageResource(isThemed
                         ? R.drawable.ic_gemini_themed
                         : R.drawable.ic_gemini_color);
                 break;
+            case ACTION_UNIVERSAL_SEARCH:
+                mActionIcon.setImageResource(R.drawable.ic_compact_search);
+                TextView textView = findViewById(R.id.compact_search_bar_text);
+                if (textView != null && textView.getTextColors() != null) {
+                    mActionIcon.setImageTintList(textView.getTextColors());
+                } else {
+                    int textColor = Themes.getAttrColor(mContext, android.R.attr.textColorPrimary);
+                    mActionIcon.setImageTintList(ColorStateList.valueOf(textColor));
+                }
+                break;
             case ACTION_GOOGLE_SEARCH:
             default:
+                mActionIcon.setImageTintList(null);
                 mActionIcon.setImageResource(isThemed
                         ? R.drawable.ic_super_g_themed
                         : R.drawable.ic_super_g_color);

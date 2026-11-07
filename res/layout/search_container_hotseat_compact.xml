@@ -27,7 +27,7 @@
             android:contentDescription="@string/label_gemini_search"
             android:importantForAccessibility="no"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_gemini_color" />
+            android:src="@drawable/ic_compact_search" />
 
         <TextView
             android:id="@+id/compact_search_bar_text"
