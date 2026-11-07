@@ -246,10 +246,24 @@
 
 
             <SwitchPreferenceCompat
+                android:key="pref_search_glanceable"
+                android:title="@string/search_glanceable_title"
+                android:summary="@string/search_glanceable_summary"
+                android:defaultValue="true"
+                launcher:iconSpaceReserved="false" />
+
+            <SwitchPreferenceCompat
                 android:key="pref_search_recent_screenshots"
                 android:title="@string/search_recent_screenshots_title"
                 android:summary="@string/search_recent_screenshots_summary"
                 android:defaultValue="false"
+                launcher:iconSpaceReserved="false" />
+
+            <SwitchPreferenceCompat
+                android:key="pref_search_recent_downloads"
+                android:title="@string/search_recent_downloads_title"
+                android:summary="@string/search_recent_downloads_summary"
+                android:defaultValue="true"
                 launcher:iconSpaceReserved="false" />
 
             <Preference

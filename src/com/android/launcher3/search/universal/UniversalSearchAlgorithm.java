@@ -166,7 +166,14 @@ public class UniversalSearchAlgorithm implements SearchAlgorithm<AdapterItem> {
         if (token != mRequest.get()) {
             return;
         }
-        ArrayList<AdapterItem> items = new ArrayList<>(historyItems(
+        ArrayList<AdapterItem> items = new ArrayList<>();
+        if (LauncherPrefs.SEARCH_GLANCEABLE.get(mContext)) {
+            UniversalSearchResult glanceable = GlanceableProvider.getGlanceableSummary(mContext);
+            if (glanceable != null) {
+                items.add(AdapterItem.asSearchTopResult(glanceable));
+            }
+        }
+        items.addAll(historyItems(
                 () -> publishEmptyQuery(token, query, appItems, callback)));
         if (LauncherPrefs.SEARCH_RECENT_SCREENSHOTS.get(mContext)) {
             List<UniversalSearchResult> shots = MediaProvider.recentScreenshots(
@@ -174,6 +181,15 @@ public class UniversalSearchAlgorithm implements SearchAlgorithm<AdapterItem> {
             if (!shots.isEmpty()) {
                 items.add(AdapterItem.asSearchSection(UniversalSearchResult.SOURCE_SCREENSHOT));
                 items.add(AdapterItem.asSearchThumbnails(shots));
+            }
+        }
+        if (LauncherPrefs.SEARCH_RECENT_DOWNLOADS.get(mContext)) {
+            List<UniversalSearchResult> downloads = MediaProvider.recentDownloads(mContext, 3);
+            if (!downloads.isEmpty()) {
+                items.add(AdapterItem.asSearchSection(UniversalSearchResult.SOURCE_RECENT_DOWNLOADS));
+                for (UniversalSearchResult file : downloads) {
+                    items.add(AdapterItem.asSearchResult(file));
+                }
             }
         }
         if (LauncherPrefs.SEARCH_PHOTOS.get(mContext) && MediaProvider.hasImagePermission(mContext)) {

@@ -103,6 +103,63 @@ public class MediaProvider implements SearchProvider {
         return out;
     }
 
+    static List<UniversalSearchResult> recentDownloads(Context context, int max) {
+        List<UniversalSearchResult> out = new ArrayList<>();
+        if (!hasPermission(context)) {
+            return out;
+        }
+        Uri collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL);
+        String selection = "(" + MediaStore.Files.FileColumns.RELATIVE_PATH + " LIKE ? OR "
+                + MediaStore.Files.FileColumns.RELATIVE_PATH + " LIKE ?) AND "
+                + MediaStore.Files.FileColumns.DISPLAY_NAME + " IS NOT NULL";
+        String[] args = new String[]{"Download/%", "%/Download/%"};
+        String sortOrder = MediaStore.Files.FileColumns.DATE_MODIFIED + " DESC";
+        try (Cursor c = context.getContentResolver().query(collection, PROJECTION,
+                selection, args, sortOrder)) {
+            if (c == null) {
+                return out;
+            }
+            int idIndex = c.getColumnIndex(MediaStore.Files.FileColumns._ID);
+            int nameIndex = c.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME);
+            int mimeIndex = c.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE);
+            int pathIndex = c.getColumnIndex(MediaStore.Files.FileColumns.RELATIVE_PATH);
+            while (c.moveToNext() && out.size() < max) {
+                String name = nameIndex < 0 ? null : c.getString(nameIndex);
+                if (TextUtils.isEmpty(name)) {
+                    continue;
+                }
+                Uri uri = ContentUris.withAppendedId(collection, c.getLong(idIndex));
+                String mime = mimeIndex < 0 ? null : c.getString(mimeIndex);
+                if (mime == null) {
+                    mime = "*/*";
+                }
+                Intent intent = new Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, mime)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                String path = pathIndex < 0 ? null : c.getString(pathIndex);
+                UniversalSearchResult result = new UniversalSearchResult(
+                        UniversalSearchResult.SOURCE_RECENT_DOWNLOADS, uri.toString(), name,
+                        path != null ? path : context.getString(com.android.launcher3.R.string.search_section_recent_downloads),
+                        intent, Process.myUserHandle(), 0);
+                if (mime.startsWith("image/") || mime.startsWith("video/")
+                        || mime.startsWith("audio/")) {
+                    result.icon = loadThumbnail(context, uri);
+                    result.thumbnail = result.icon != null;
+                }
+                if (result.icon == null) {
+                    boolean isApk = name != null && name.toLowerCase().endsWith(".apk");
+                    result.iconRes = isApk ? com.android.launcher3.R.drawable.ic_search_apk
+                            : com.android.launcher3.R.drawable.ic_search_file;
+                }
+                out.add(result);
+            }
+        } catch (RuntimeException e) {
+            return out;
+        }
+        return out;
+    }
+
     public static boolean hasPermission(Context context) {
         for (String permission : PERMISSIONS) {
             if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {

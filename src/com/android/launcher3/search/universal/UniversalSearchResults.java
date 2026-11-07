@@ -122,6 +122,8 @@ public class UniversalSearchResults {
                 return context.getString(R.string.search_section_photos);
             case UniversalSearchResult.SOURCE_SCREENSHOT:
                 return context.getString(R.string.search_section_screenshots);
+            case UniversalSearchResult.SOURCE_RECENT_DOWNLOADS:
+                return context.getString(R.string.search_section_recent_downloads);
             default:
                 return "";
         }
@@ -139,6 +141,7 @@ public class UniversalSearchResults {
             case UniversalSearchResult.SOURCE_CALCULATOR:
                 return R.drawable.ic_search_calculator;
             case UniversalSearchResult.SOURCE_FILE:
+            case UniversalSearchResult.SOURCE_RECENT_DOWNLOADS:
                 return R.drawable.ic_search_file;
             case UniversalSearchResult.SOURCE_EVENT:
                 return R.drawable.ic_search_event;
@@ -335,7 +338,9 @@ public class UniversalSearchResults {
             items.add(new int[]{MENU_MESSAGE, R.string.search_menu_message});
             items.add(new int[]{MENU_COPY_NUMBER, R.string.search_menu_copy_number});
         }
-        if (result.source == UniversalSearchResult.SOURCE_FILE && result.intent != null) {
+        if ((result.source == UniversalSearchResult.SOURCE_FILE
+                || result.source == UniversalSearchResult.SOURCE_RECENT_DOWNLOADS)
+                && result.intent != null) {
             items.add(new int[]{MENU_SHARE, R.string.search_menu_share});
             items.add(new int[]{MENU_OPEN_WITH, R.string.search_menu_open_with});
         }

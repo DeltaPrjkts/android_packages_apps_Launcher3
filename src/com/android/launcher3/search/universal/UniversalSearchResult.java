@@ -25,6 +25,7 @@ public class UniversalSearchResult {
     public static final int SOURCE_HISTORY = 13;
     public static final int SOURCE_PHOTO = 14;
     public static final int SOURCE_SCREENSHOT = 15;
+    public static final int SOURCE_RECENT_DOWNLOADS = 16;
 
     public final int source;
     public final String id;
@@ -67,6 +68,7 @@ public class UniversalSearchResult {
 
     /** Rows that stand in for something else and must not be ranked or remembered. */
     public boolean isPlaceholder() {
-        return onTap != null || "permission".equals(id);
+        return onTap != null || "permission".equals(id)
+                || (id != null && (id.startsWith("quick_tool_") || id.startsWith("glanceable_")));
     }
 }

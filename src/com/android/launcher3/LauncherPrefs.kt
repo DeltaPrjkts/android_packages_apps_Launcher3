@@ -320,6 +320,8 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField val SEARCH_PHOTOS = backedUpItem("pref_search_photos", false)
         @JvmField
         val SEARCH_RECENT_SCREENSHOTS = backedUpItem("pref_search_recent_screenshots", false)
+        @JvmField val SEARCH_GLANCEABLE = backedUpItem("pref_search_glanceable", true)
+        @JvmField val SEARCH_RECENT_DOWNLOADS = backedUpItem("pref_search_recent_downloads", true)
         @JvmField val FONT_SIZE = backedUpItem("pref_custom_font_size", 100)
         @JvmField val FREEFORM_GESTURE = backedUpItem("pref_start_freeform_by_gesture", false)
         @JvmField val OVERVIEW_GESTURE_ACTION = backedUpItem("pref_overview_gesture_action", "freeform")

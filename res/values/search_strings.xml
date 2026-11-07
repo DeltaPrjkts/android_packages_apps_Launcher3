@@ -122,4 +122,9 @@
     <string name="universal_search_hint">Search apps and more</string>
     <string name="search_toggle_on">On</string>
     <string name="search_toggle_off">Off</string>
+    <string name="search_glanceable_title">Glanceable summary card</string>
+    <string name="search_glanceable_summary">Show upcoming calendar events, alarms or battery info before typing</string>
+    <string name="search_section_recent_downloads">Recent downloads</string>
+    <string name="search_recent_downloads_title">Recent downloads</string>
+    <string name="search_recent_downloads_summary">Show recently downloaded files before typing</string>
 </resources>

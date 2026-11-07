@@ -63,7 +63,7 @@ final class UniversalSearchLauncher {
         launcher.getOverlayManager().hideOverlay(true);
         launcher.getAppsView().setUniversalSearchActive(true);
         // Search shares the All Apps container, but should open directly from home.
-        launcher.getStateManager().goToState(ALL_APPS, false);
+        launcher.getStateManager().goToState(ALL_APPS, true);
         launcher.getAppsView().getSearchUiManager().focusSearchField();
     }
 }

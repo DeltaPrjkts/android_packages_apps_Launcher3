@@ -392,9 +392,7 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
             return;
         }
         mUniversalSearchActive = active;
-        if ("hidden".equals(LauncherPrefs.ALL_APPS_SEARCH_PLACEMENT.get(getContext()))) {
-            rebindAdapters(true);
-        }
+        rebindAdapters(true);
         if (active) {
             // Hide the app grid before the container is shown, without waiting for results.
             animateToSearchState(true, 0);
@@ -402,8 +400,10 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     }
 
     private String getSearchBarPlacement() {
-        String placement = LauncherPrefs.ALL_APPS_SEARCH_PLACEMENT.get(getContext());
-        return mUniversalSearchActive && "hidden".equals(placement) ? "top" : placement;
+        if (mUniversalSearchActive) {
+            return "top";
+        }
+        return LauncherPrefs.ALL_APPS_SEARCH_PLACEMENT.get(getContext());
     }
 
     /** Invoke when the current search session is finished. */
@@ -1163,6 +1163,16 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
         RelativeLayout.LayoutParams layoutParams = (LayoutParams) mSearchContainer.getLayoutParams();
         layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
         layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        layoutParams.topMargin = 0;
+        int extraMargin = getResources().getDimensionPixelSize(R.dimen.all_apps_search_bar_bottom_padding_extra);
+        int bottomPaddingArea = mInsets != null ? Math.max(mInsets.bottom, mNavBarScrimHeight) : mNavBarScrimHeight;
+        if (bottomPaddingArea == 0 && getRootWindowInsets() != null) {
+            bottomPaddingArea = getRootWindowInsets().getInsets(WindowInsets.Type.systemBars()).bottom;
+        }
+        if (bottomPaddingArea == 0) {
+            bottomPaddingArea = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 32, getResources().getDisplayMetrics());
+        }
+        layoutParams.bottomMargin = bottomPaddingArea + extraMargin;
         mSearchContainer.setLayoutParams(layoutParams);
     }
 
@@ -1173,6 +1183,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
         RelativeLayout.LayoutParams layoutParams = (LayoutParams) mSearchContainer.getLayoutParams();
         layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        layoutParams.bottomMargin = 0;
+        layoutParams.topMargin = getResources().getDimensionPixelSize(
+                R.dimen.all_apps_search_bar_margin_top);
         mSearchContainer.setLayoutParams(layoutParams);
     }
 

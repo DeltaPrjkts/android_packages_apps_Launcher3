@@ -40,10 +40,6 @@ public final class SearchResultTheme {
             ((ImageView) view.findViewById(id)).setImageTintList(
                     ColorStateList.valueOf(textColor(context)));
         }
-        if (view.getId() == R.id.search_top_result) {
-            view.setBackground(background(context,
-                    ColorUtils.setAlphaComponent(textColor(context), 20), false));
-        }
     }
 
     static void bindChip(TextView chip, boolean selected) {

@@ -14,8 +14,8 @@
 
     <ImageView
         android:id="@+id/search_result_icon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
         android:scaleType="fitCenter" />
 
     <LinearLayout
