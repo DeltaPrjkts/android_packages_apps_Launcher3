@@ -66,7 +66,11 @@ class AnimatorBackState @JvmOverloads constructor(
         if (!registerStateAnimation && springAnim?.isCos == true) {
             anim?.addListener(forEndCallback(Runnable { springAnim.detachWindow() }))
         }
-        result.setAnimation(anim, c)
+        if (springAnim?.isNothing == true) {
+            result.setAnimation(anim, c, null, false, springAnim)
+        } else {
+            result.setAnimation(anim, c)
+        }
     }
 
     override fun start(stateManager: StateManager<LauncherState, Launcher>) {
@@ -77,6 +81,11 @@ class AnimatorBackState @JvmOverloads constructor(
     }
 
     override fun cancel() {
+        if (springAnim?.isNothing == true) {
+            springAnim.cancel()
+            anim?.cancel()
+            return
+        }
         if (registerStateAnimation) return
         if (springAnim?.isCos == true) springAnim.detachWindow() else springAnim?.cancel()
         anim?.cancel()

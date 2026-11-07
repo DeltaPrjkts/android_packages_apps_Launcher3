@@ -45,8 +45,9 @@ import com.android.quickstep.RemoteTargetGluer.RemoteTargetHandle;
 import com.android.quickstep.orientation.RecentsPagedOrientationHandler;
 import com.android.quickstep.util.AnimatorControllerWithResistance;
 import com.android.quickstep.util.RectFSpringAnim;
+import com.android.quickstep.util.NothingAppAnimation;
 import com.android.quickstep.util.RectFSpringAnim.DefaultSpringConfig;
-import com.android.quickstep.util.RectFSpringAnim.IconSpringConfig;
+import com.android.quickstep.util.RectFSpringAnim.NothingSpringConfig;
 import com.android.quickstep.util.RectFSpringAnim.CosSpringConfig;
 import com.android.quickstep.cos.CosAppAnimation;
 import com.android.quickstep.cos.CosHomeSnapshot;
@@ -275,10 +276,6 @@ public abstract class SwipeUpAnimationLogic implements
             return false;
         }
 
-        public boolean shouldUseIconCloseAnimation() {
-            return false;
-        }
-
         @Nullable
         public TaskView getTargetTaskView() {
             return null;
@@ -402,8 +399,8 @@ public abstract class SwipeUpAnimationLogic implements
                 && homeAnimationFactory.shouldUseCosCloseAnimation();
         RectFSpringAnim anim = cos
                 ? new RectFSpringAnim(new CosSpringConfig(mContext, mDp, startRect, targetRect))
-                : homeAnimationFactory.shouldUseIconCloseAnimation()
-                ? new RectFSpringAnim(new IconSpringConfig(mContext, mDp, startRect, targetRect))
+                : !CosAppAnimation.isEnabled(mContext)
+                ? new RectFSpringAnim(new NothingSpringConfig(mContext, mDp, startRect, targetRect))
                 : new RectFSpringAnim(useTaskbarHotseatParams
                         ? new TaskbarHotseatSpringConfig(mContext, startRect, targetRect)
                         : homeAnimationFactory.isWidget()
@@ -417,7 +414,7 @@ public abstract class SwipeUpAnimationLogic implements
                 homeToWindowPositionMap,
                 transformParams,
                 taskViewSimulator,
-                invariantStartRect);
+                invariantStartRect, anim);
         anim.addAnimatorListener(runner);
         anim.addOnUpdateListener(runner);
         if (cos) mCosHomeAnimationRunner = runner;
@@ -428,6 +425,7 @@ public abstract class SwipeUpAnimationLogic implements
             implements RectFSpringAnim.OnUpdateListener, BuilderProxy {
 
         private static final String TAG = "SpringAnimationRunner";
+        private final boolean mNothingAnimation;
 
         final Rect mCropRect = new Rect();
         final Matrix mMatrix = new Matrix();
@@ -471,7 +469,8 @@ public abstract class SwipeUpAnimationLogic implements
                 Matrix homeToWindowPositionMap,
                 TransformParams transformParams,
                 TaskViewSimulator taskViewSimulator,
-                RectF invariantStartRect) {
+                RectF invariantStartRect, RectFSpringAnim spring) {
+            mNothingAnimation = spring.isNothing() && factory.getTargetTaskView() == null;
             mAnimationFactory = factory;
             mHomeAnim = factory.createActivityAnimationToHome();
             mCropRectF = cropRectF;
@@ -483,7 +482,10 @@ public abstract class SwipeUpAnimationLogic implements
             // End on a "round-enough" radius so that the shape reveal doesn't have to do too much
             // rounding at the end of the animation.
             mStartRadius = taskViewSimulator.getCurrentCornerRadius();
-            mEndRadius = factory.getEndRadius(cropRectF);
+            float endRadius = factory.getEndRadius(cropRectF);
+            mEndRadius = mNothingAnimation && !factory.isWidget()
+                    ? endRadius * spring.getTargetRect().width() / Math.max(1f, cropRectF.width())
+                    : endRadius;
 
             mRunningTaskViewStartRectF = invariantStartRect;
             mTargetTaskView = factory.getTargetTaskView();
@@ -510,7 +512,17 @@ public abstract class SwipeUpAnimationLogic implements
             }
             if (mTargetTaskView == null) {
                 mHomeToWindowPositionMap.mapRect(mWindowCurrentRect, currentRect);
-                if (mAnimationFactory.isWidget()) {
+                if (mNothingAnimation) {
+                    float scale = NothingAppAnimation.updateWindowCrop(mCropRectF,
+                            mWindowCurrentRect, mMatrix, mWidgetCropRectF);
+                    if (scale <= 0f) return;
+                    mWidgetCropRectF.round(mCropRect);
+                    cornerRadius /= scale;
+                    if (mAnimationFactory.isWidget()) {
+                        mAnimationFactory.update(currentRect, progress,
+                                mMatrix.mapRadius(cornerRadius), 0);
+                    }
+                } else if (mAnimationFactory.isWidget()) {
                     float scale = WidgetAnimationUtils.updateWindowCrop(mCropRectF,
                             mWindowCurrentRect, mMatrix, mWidgetCropRectF);
                     if (scale <= 0f) {

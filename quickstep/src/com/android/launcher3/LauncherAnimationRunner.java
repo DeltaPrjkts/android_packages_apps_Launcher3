@@ -34,6 +34,7 @@ import androidx.annotation.BinderThread;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
 
+import com.android.quickstep.util.RectFSpringAnim;
 import com.android.systemui.animation.RemoteAnimationDelegate;
 import com.android.systemui.animation.RemoteAnimationRunnerCompat;
 
@@ -137,6 +138,9 @@ public class LauncherAnimationRunner extends RemoteAnimationRunnerCompat {
         private Runnable mOnCompleteCallback;
         private boolean mFinished = false;
         private boolean mInitialized = false;
+        private RectFSpringAnim mWindowSpring;
+        private boolean mAnimatorEnded;
+        private boolean mSpringEnded = true;
 
         private AnimationResult(Runnable syncFinishRunnable, Runnable asyncFinishRunnable) {
             mSyncFinishRunnable = syncFinishRunnable;
@@ -146,6 +150,13 @@ public class LauncherAnimationRunner extends RemoteAnimationRunnerCompat {
         @UiThread
         private void finish() {
             if (!mFinished) {
+                mFinished = true;
+                if (mWindowSpring != null) {
+                    if (mWindowSpring.isRunning()) mWindowSpring.end();
+                    if (!mAnimatorEnded && mAnimator != null && mAnimator.isStarted()) {
+                        mAnimator.cancel();
+                    }
+                }
                 mSyncFinishRunnable.run();
                 UI_HELPER_EXECUTOR.execute(() -> {
                     mASyncFinishRunnable.run();
@@ -153,8 +164,11 @@ public class LauncherAnimationRunner extends RemoteAnimationRunnerCompat {
                         MAIN_EXECUTOR.execute(mOnCompleteCallback);
                     }
                 });
-                mFinished = true;
             }
+        }
+
+        private void finishIfAnimationsEnded() {
+            if (mAnimatorEnded && mSpringEnded) finish();
         }
 
         @UiThread
@@ -170,18 +184,37 @@ public class LauncherAnimationRunner extends RemoteAnimationRunnerCompat {
         @UiThread
         public void setAnimation(AnimatorSet animation, Context context,
                 @Nullable Runnable onCompleteCallback, boolean skipFirstFrame) {
+            setAnimation(animation, context, onCompleteCallback, skipFirstFrame, null);
+        }
+
+        @UiThread
+        public void setAnimation(AnimatorSet animation, Context context,
+                @Nullable Runnable onCompleteCallback, boolean skipFirstFrame,
+                @Nullable RectFSpringAnim windowSpring) {
             if (mInitialized) {
                 throw new IllegalStateException("Animation already initialized");
             }
             mInitialized = true;
             mAnimator = animation;
             mOnCompleteCallback = onCompleteCallback;
+            mWindowSpring = windowSpring;
+            mSpringEnded = windowSpring == null;
+            if (windowSpring != null) {
+                windowSpring.addAnimatorListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator ignored) {
+                        mSpringEnded = true;
+                        finishIfAnimationsEnded();
+                    }
+                });
+            }
             if (mAnimator == null) {
                 finish();
             } else if (mFinished) {
                 // Animation callback was already finished, skip the animation.
                 mAnimator.start();
                 mAnimator.end();
+                if (mWindowSpring != null) mWindowSpring.end();
                 if (mOnCompleteCallback != null) {
                     mOnCompleteCallback.run();
                 }
@@ -190,7 +223,9 @@ public class LauncherAnimationRunner extends RemoteAnimationRunnerCompat {
                 mAnimator.addListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
-                        finish();
+                        mAnimatorEnded = true;
+                        mSpringEnded = mWindowSpring == null || !mWindowSpring.isRunning();
+                        finishIfAnimationsEnded();
                     }
                 });
                 if (skipFirstFrame) {

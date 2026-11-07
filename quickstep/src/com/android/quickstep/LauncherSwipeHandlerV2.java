@@ -52,7 +52,7 @@ import com.android.launcher3.views.FloatingView;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.quickstep.util.ActiveGestureLog;
 import com.android.quickstep.util.LunarisBarAnimation;
-import com.android.quickstep.util.OosAppCloseAnimation;
+import com.android.quickstep.util.NothingAppAnimation;
 import com.android.quickstep.cos.CosAppAnimation;
 import com.android.quickstep.cos.CosWorkspaceRevealAnim;
 import com.android.quickstep.util.RectFSpringAnim;
@@ -237,18 +237,6 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
             }
 
             @Override
-            public boolean shouldUseIconCloseAnimation() {
-                return isAnimatingIntoIcon()
-                        && !isTargetTranslucent
-                        && !mDp.getDeviceProperties().isTablet()
-                        && !mDp.isTaskbarPresent
-                        && targetTaskView == null
-                        && !mIsSwipeForSplit
-                        && !mIsSwipingPipToHome
-                        && mRemoteTargetHandles.length == 1;
-            }
-
-            @Override
             public boolean shouldUseCosCloseAnimation() {
                 return isAnimatingIntoIcon() && !isTargetTranslucent
                         && targetTaskView == null && !mIsSwipeForSplit && !mIsSwipingPipToHome
@@ -260,8 +248,8 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 if (mSiblingAnimation != null && mSiblingAnimation.isCos()) {
                     return 1f - mSiblingAnimation.getCosFadeProgress();
                 }
-                return shouldUseIconCloseAnimation()
-                        ? OosAppCloseAnimation.getWindowAlpha(progress)
+                return mSiblingAnimation != null && mSiblingAnimation.isNothing()
+                        ? NothingAppAnimation.getWindowAlpha(progress, false)
                         : super.getWindowAlpha(progress);
             }
 
@@ -274,13 +262,14 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 // We want the icon alpha to be 1 once this threshold is met, so that it can be
                 // seen morphing into the icon shape. But before the threshold, we want to limit
                 // the alpha to reduce the blur effect behind the window.
-                boolean useIconCloseAnimation = shouldUseIconCloseAnimation();
+                boolean useNothingAnimation = mSiblingAnimation != null
+                        && mSiblingAnimation.isNothing();
                 boolean cos = mSiblingAnimation != null && mSiblingAnimation.isCos();
-                float iconAlpha = cos ? mSiblingAnimation.getCosFadeProgress() : useIconCloseAnimation
-                        ? OosAppCloseAnimation.getIconAlpha(progress)
+                float iconAlpha = cos ? mSiblingAnimation.getCosFadeProgress() : useNothingAnimation
+                        ? 1f
                         : Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
-                float shapeProgressStart = cos ? 0f : useIconCloseAnimation
-                        ? OosAppCloseAnimation.SHAPE_PROGRESS_START : windowAlphaThreshold;
+                float shapeProgressStart = cos ? 0f : useNothingAnimation
+                        ? NothingAppAnimation.SHAPE_PROGRESS_START : windowAlphaThreshold;
                 floatingIconView.update(iconAlpha, currentRect, progress, shapeProgressStart,
                         radius, false, overlayAlpha);
             }
@@ -374,6 +363,12 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
             @Override
             public void update(RectF currentRect, float progress, float radius, int overlayAlpha) {
                 super.update(currentRect, progress, radius, overlayAlpha);
+                if (mSiblingAnimation != null && mSiblingAnimation.isNothing()) {
+                    float foreground = mapBoundToRange(progress, 0.8f, 1f, 0f, 1f, LINEAR);
+                    floatingWidgetView.update(currentRect, floatingWidgetAlpha,
+                            foreground, 1f - foreground, 1f - progress);
+                    return;
+                }
                 float currentPosProgress = totalDiff > 0f
                         ? Math.abs(posProvider.apply(currentRect) - startPos) / totalDiff : 1f;
                 if (!mThresholdCaptured && progress >= 0.99f) {
@@ -391,6 +386,9 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
 
             @Override
             protected float getWindowAlpha(float progress) {
+                if (mSiblingAnimation != null && mSiblingAnimation.isNothing()) {
+                    return NothingAppAnimation.getWindowAlpha(progress, false);
+                }
                 return 1 - mapBoundToRange(progress, 0, 0.5f, 0, 1, LINEAR);
             }
 

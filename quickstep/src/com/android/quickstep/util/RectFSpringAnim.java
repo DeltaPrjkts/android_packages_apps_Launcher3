@@ -147,9 +147,9 @@ public class RectFSpringAnim extends ReleaseCheck {
     protected final float mDampingY;
     protected final float mRectStiffness;
     private final float mRectDamping;
-    private final boolean mUseIconSpringConfig;
     private final boolean mUseConfiguredSpring;
     private final boolean mCos;
+    private final boolean mNothing;
     private long mCosStartTime;
     private float mCosDurationScale;
     private float mCosFadeProgress;
@@ -173,10 +173,11 @@ public class RectFSpringAnim extends ReleaseCheck {
         mDampingY = config.dampingY;
         mRectStiffness = config.rectStiffness;
         mRectDamping = config.rectDamping;
-        mUseIconSpringConfig = config instanceof IconSpringConfig;
         mCos = config instanceof CosSpringConfig;
+        mNothing = config instanceof NothingSpringConfig;
         mFrameUpdate = mCos ? this::dispatchFrameUpdate : null;
-        mUseConfiguredSpring = mUseIconSpringConfig || mCos || config instanceof WidgetSpringConfig;
+        mUseConfiguredSpring = mCos || mNothing
+                || config instanceof WidgetSpringConfig;
 
         mCurrentY = getTrackedYFromRect(mStartRect);
     }
@@ -185,12 +186,12 @@ public class RectFSpringAnim extends ReleaseCheck {
         return mTargetRect;
     }
 
-    public boolean isIconCloseAnimation() {
-        return mUseIconSpringConfig;
-    }
-
     public boolean isCos() {
         return mCos;
+    }
+
+    public boolean isNothing() {
+        return mNothing;
     }
 
     public boolean isRunning() {
@@ -312,9 +313,8 @@ public class RectFSpringAnim extends ReleaseCheck {
                 mCos ? 2500 : sCachedMaxVelocityYPxPerS,
                 sCachedFallOffFactor);
 
-        float durationScale = mUseIconSpringConfig ? OosAppCloseAnimation.DURATION_SCALE : 1f;
-        xVelocityPxPerS /= durationScale;
-        yVelocityPxPerS /= durationScale;
+        float stiffnessScale = mNothing && ValueAnimator.areAnimatorsEnabled()
+                ? 1f / ValueAnimator.getDurationScale() : 1f;
 
         if (mCos) {
             if ((endX - startX) * xVelocityPxPerS < 0) xVelocityPxPerS *= 0.25f;
@@ -330,7 +330,7 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setSpring(
                                 new SpringForce(endX)
                                         .setStiffness(mUseConfiguredSpring
-                                                ? mStiffnessX : sCachedStiffnessX)
+                                                ? mStiffnessX * stiffnessScale : sCachedStiffnessX)
                                         .setDampingRatio(mUseConfiguredSpring
                                                 ? mDampingX : sCachedDampingX)
                         ).setStartValue(startX)
@@ -342,7 +342,7 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setSpring(
                                 new SpringForce(endY)
                                         .setStiffness(mUseConfiguredSpring
-                                                ? mStiffnessY : sCachedStiffnessY)
+                                                ? mStiffnessY * stiffnessScale : sCachedStiffnessY)
                                         .setDampingRatio(mUseConfiguredSpring
                                                 ? mDampingY : sCachedDampingY)
                         )
@@ -355,12 +355,12 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setSpring(
                                 new SpringForce(1f)
                                         .setStiffness(mUseConfiguredSpring
-                                                ? mRectStiffness : sCachedStiffnessZ)
+                                                ? mRectStiffness * stiffnessScale : sCachedStiffnessZ)
                                         .setDampingRatio(mUseConfiguredSpring
                                                 ? mRectDamping : sCachedDampingZ))
                         .setStartVelocity(mCos ? Utilities.boundToRange(
                                 -velocityPxPerMs.y * 1000 / Math.max(1f, mStartRect.height()), 0f, 8f)
-                                : velocityPxPerMs.y * minVisibleChange / durationScale)
+                                : velocityPxPerMs.y * minVisibleChange)
                         .setMaxValue(mCos ? 1.25f : 1f)
                         .setMinimumVisibleChange(minVisibleChange)
                         .addEndListener((animation, canceled, value, velocity) -> {
@@ -378,6 +378,7 @@ public class RectFSpringAnim extends ReleaseCheck {
         for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
             animatorListener.onAnimationStart(null);
         }
+        if (mNothing && !ValueAnimator.areAnimatorsEnabled()) end();
         if (mCos && !ValueAnimator.areAnimatorsEnabled()) end();
     }
 
@@ -399,7 +400,7 @@ public class RectFSpringAnim extends ReleaseCheck {
                 mRectScaleAnim.skipToEnd();
             }
             mCurrentScaleProgress = mRectScaleAnim.getSpring().getFinalPosition();
-            if (mUseIconSpringConfig || mCos) {
+            if (mCos || mNothing) {
                 mCurrentCenterX = mTargetRect.centerX();
                 mCurrentY = getTrackedYFromRect(mTargetRect);
             }
@@ -460,8 +461,14 @@ public class RectFSpringAnim extends ReleaseCheck {
         if (!mOnUpdateListeners.isEmpty()) {
             float startWidth = mStartRect.width();
             float startHeight = mStartRect.height();
-            float currentWidth = startWidth + mCurrentScaleProgress * (mTargetRect.width() - startWidth);
-            float currentHeight = startHeight + mCurrentScaleProgress * (mTargetRect.height() - startHeight);
+            float sizeProgress = mNothing
+                    ? NothingAppAnimation.getSizeProgress(mCurrentScaleProgress)
+                    : mCurrentScaleProgress;
+            float currentWidth = startWidth + sizeProgress * (mTargetRect.width() - startWidth);
+            float currentHeight = mNothing
+                    ? NothingAppAnimation.getHeight(sizeProgress, startWidth, startHeight,
+                            mTargetRect.width(), mTargetRect.height())
+                    : startHeight + sizeProgress * (mTargetRect.height() - startHeight);
             if (mCos && startWidth > 0 && mTargetRect.width() > 0) {
                 currentWidth = Math.max(mTargetRect.width() * 0.95f, currentWidth);
                 currentHeight = currentWidth * Utilities.mapRange(
@@ -629,6 +636,23 @@ public class RectFSpringAnim extends ReleaseCheck {
         }
     }
 
+    public static final class NothingSpringConfig extends DefaultSpringConfig {
+        public NothingSpringConfig(Context context, DeviceProfile deviceProfile,
+                RectF startRect, RectF targetRect) {
+            super(context, deviceProfile, startRect, targetRect);
+            stiffnessX = NothingAppAnimation.STIFFNESS_X;
+            stiffnessY = NothingAppAnimation.STIFFNESS_Y;
+            rectStiffness = NothingAppAnimation.STIFFNESS_SCALE;
+            dampingX = dampingY = rectDamping = NothingAppAnimation.DAMPING_RATIO;
+        }
+
+        public NothingSpringConfig(Context context, DeviceProfile deviceProfile,
+                RectF startRect, RectF targetRect, @Tracking int tracking) {
+            this(context, deviceProfile, startRect, targetRect);
+            this.tracking = tracking;
+        }
+    }
+
     public static final class WidgetSpringConfig extends DefaultSpringConfig {
 
         public WidgetSpringConfig(Context context, DeviceProfile deviceProfile,
@@ -658,23 +682,6 @@ public class RectFSpringAnim extends ReleaseCheck {
                     Math.abs(targetRect.centerY() - startRect.centerY()));
             rectDamping = CosAppAnimation.bounceDamping(
                     0.05f * targetRect.width(), startRect.width() - targetRect.width());
-        }
-    }
-
-    public static final class IconSpringConfig extends DefaultSpringConfig {
-
-        public IconSpringConfig(Context context, DeviceProfile deviceProfile,
-                RectF startRect, RectF targetRect) {
-            super(context, deviceProfile, startRect, targetRect);
-            tracking = TRACKING_CENTER;
-            float stiffnessScale = 1f / (OosAppCloseAnimation.DURATION_SCALE
-                    * OosAppCloseAnimation.DURATION_SCALE);
-            stiffnessX = 700f * stiffnessScale;
-            stiffnessY = 900f * stiffnessScale;
-            rectStiffness = 900f * stiffnessScale;
-            dampingX = 0.9f;
-            dampingY = 0.9f;
-            rectDamping = 0.9f;
         }
     }
 
