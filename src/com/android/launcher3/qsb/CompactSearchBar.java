@@ -1,5 +1,11 @@
 package com.android.launcher3.qsb;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.Keyframe;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -23,6 +29,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.app.animation.Interpolators;
 import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
@@ -44,12 +51,18 @@ public class CompactSearchBar extends FrameLayout
     private static final String ACTION_GEMINI = "gemini";
     private static final String ACTION_UNIVERSAL_SEARCH = "universal_search";
 
+    private static final long SQUISH_DURATION_MS = 400L;
+    private static final long ACTION_LAUNCH_DELAY_MS = 120L;
+
     private final MultiTranslateDelegate mTranslateDelegate = new MultiTranslateDelegate(this);
     private final Context mContext;
     private float mScaleForReorderBounce = 1f;
 
     private ImageView mActionIcon;
     private View mInner;
+    private ObjectAnimator mSquishAnimator;
+    private boolean mIsLaunching;
+    private final Runnable mLaunchRunnable = this::launchActionInternal;
     private final ThemeManager.ThemeChangeListener mThemeChangeListener = () -> {
         setIcon();
         setUpBackground();
@@ -90,6 +103,16 @@ public class CompactSearchBar extends FrameLayout
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        removeCallbacks(mLaunchRunnable);
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+            mSquishAnimator = null;
+        }
+        mIsLaunching = false;
+        if (mInner != null) {
+            mInner.setScaleX(1f);
+            mInner.setScaleY(1f);
+        }
         ThemeManager.INSTANCE.get(mContext).addChangeListener(mThemeChangeListener);
         LauncherPrefs.getPrefs(mContext).registerOnSharedPreferenceChangeListener(this);
         mBackdropBlur.onAttachedToWindow();
@@ -105,15 +128,23 @@ public class CompactSearchBar extends FrameLayout
 
     @Override
     protected void onDetachedFromWindow() {
+        removeCallbacks(mLaunchRunnable);
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+            mSquishAnimator = null;
+        }
+        mIsLaunching = false;
+        if (mInner != null) {
+            mInner.setScaleX(1f);
+            mInner.setScaleY(1f);
+            mInner.setOnClickListener(null);
+            mInner.setBackground(null);
+        }
         mBackdropBlur.onDetachedFromWindow();
         mBlurDrawn = false;
         CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
         ThemeManager.INSTANCE.get(mContext).removeChangeListener(mThemeChangeListener);
         LauncherPrefs.getPrefs(mContext).unregisterOnSharedPreferenceChangeListener(this);
-        if (mInner != null) {
-            mInner.setOnClickListener(null);
-            mInner.setBackground(null);
-        }
         super.onDetachedFromWindow();
     }
 
@@ -166,6 +197,16 @@ public class CompactSearchBar extends FrameLayout
             postInvalidate();
         } else {
             hideBlur();
+            removeCallbacks(mLaunchRunnable);
+            if (mSquishAnimator != null) {
+                mSquishAnimator.cancel();
+                mSquishAnimator = null;
+            }
+            mIsLaunching = false;
+            if (mInner != null) {
+                mInner.setScaleX(1f);
+                mInner.setScaleY(1f);
+            }
         }
     }
 
@@ -205,8 +246,27 @@ public class CompactSearchBar extends FrameLayout
         }
 
         updateBlurState();
-        boolean blurDrawn = mBackdropBlur.draw(canvas, mInner.getLeft(), mInner.getTop(),
-                mInner.getRight(), mInner.getBottom(), getCornerRadius());
+        int left = mInner.getLeft();
+        int top = mInner.getTop();
+        int right = mInner.getRight();
+        int bottom = mInner.getBottom();
+        float cornerRadius = getCornerRadius();
+
+        float scaleX = mInner.getScaleX();
+        float scaleY = mInner.getScaleY();
+        if (scaleX != 1f || scaleY != 1f) {
+            float cx = (left + right) / 2f;
+            float cy = (top + bottom) / 2f;
+            float halfW = ((right - left) / 2f) * scaleX;
+            float halfH = ((bottom - top) / 2f) * scaleY;
+            left = Math.round(cx - halfW);
+            top = Math.round(cy - halfH);
+            right = Math.round(cx + halfW);
+            bottom = Math.round(cy + halfH);
+            cornerRadius = cornerRadius * Math.min(scaleX, scaleY);
+        }
+
+        boolean blurDrawn = mBackdropBlur.draw(canvas, left, top, right, bottom, cornerRadius);
         if (mBlurDrawn != blurDrawn) {
             mBlurDrawn = blurDrawn;
             setUpBackground();
@@ -339,10 +399,90 @@ public class CompactSearchBar extends FrameLayout
     }
 
     private void setUpClick() {
-        View.OnClickListener listener = view -> launchAction();
         if (mInner != null) {
-            mInner.setOnClickListener(listener);
+            mInner.setOnClickListener(view -> handleSearchClick());
         }
+    }
+
+    private void handleSearchClick() {
+        if (mIsLaunching) return;
+        mIsLaunching = true;
+
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            launchActionInternal();
+            return;
+        }
+
+        playSquishAnimation();
+        postDelayed(mLaunchRunnable, ACTION_LAUNCH_DELAY_MS);
+    }
+
+    private void launchActionInternal() {
+        try {
+            launchAction();
+        } finally {
+            postDelayed(() -> mIsLaunching = false, 300);
+        }
+    }
+
+    private void playSquishAnimation() {
+        if (mInner == null) return;
+
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+        }
+
+        mInner.setScaleX(1f);
+        mInner.setScaleY(1f);
+        if (mInner.getWidth() > 0 && mInner.getHeight() > 0) {
+            mInner.setPivotX(mInner.getWidth() / 2f);
+            mInner.setPivotY(mInner.getHeight() / 2f);
+        }
+
+        Keyframe kf0X = Keyframe.ofFloat(0f, 1f);
+        Keyframe kf1X = Keyframe.ofFloat(120f / 400f, 1.066f);
+        kf1X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf2X = Keyframe.ofFloat(260f / 400f, 0.967f);
+        kf2X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf3X = Keyframe.ofFloat(1f, 1f);
+        kf3X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        PropertyValuesHolder pvhScaleX = PropertyValuesHolder.ofKeyframe(
+                View.SCALE_X, kf0X, kf1X, kf2X, kf3X);
+
+        Keyframe kf0Y = Keyframe.ofFloat(0f, 1f);
+        Keyframe kf1Y = Keyframe.ofFloat(120f / 400f, 0.945f);
+        kf1Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf2Y = Keyframe.ofFloat(260f / 400f, 1.033f);
+        kf2Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf3Y = Keyframe.ofFloat(1f, 1f);
+        kf3Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        PropertyValuesHolder pvhScaleY = PropertyValuesHolder.ofKeyframe(
+                View.SCALE_Y, kf0Y, kf1Y, kf2Y, kf3Y);
+
+        mSquishAnimator = ObjectAnimator.ofPropertyValuesHolder(mInner, pvhScaleX, pvhScaleY);
+        mSquishAnimator.setDuration(SQUISH_DURATION_MS);
+        mSquishAnimator.addUpdateListener(anim -> invalidate());
+        mSquishAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                resetSquishState();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                resetSquishState();
+            }
+        });
+        mSquishAnimator.start();
+    }
+
+    private void resetSquishState() {
+        if (mInner != null) {
+            mInner.setScaleX(1f);
+            mInner.setScaleY(1f);
+        }
+        mSquishAnimator = null;
+        invalidate();
     }
 
     private void launchAction() {
