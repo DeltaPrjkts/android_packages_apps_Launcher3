@@ -51,6 +51,8 @@ public final class WorkspaceBatchEditor {
     private View mToolbar;
     private TextView mCount;
     private View mMove;
+    private View mFolders;
+    private WorkspaceFolderActions mFolderActions;
     private boolean mActive;
     private boolean mDragging;
     private boolean mClosing;
@@ -130,6 +132,9 @@ public final class WorkspaceBatchEditor {
         mLauncher.getDragLayer().addView(mToolbar, lp);
         mCount = mToolbar.findViewById(R.id.batch_edit_count);
         mMove = mToolbar.findViewById(R.id.batch_edit_move);
+        mFolders = mToolbar.findViewById(R.id.batch_edit_folders);
+        if (mFolderActions == null) mFolderActions = new WorkspaceFolderActions(mLauncher, mWorkspace);
+        mFolders.setOnClickListener(v -> mFolderActions.show(new ArrayList<>(mSelected)));
         mToolbar.findViewById(R.id.batch_edit_done).setOnClickListener(v -> finish());
         mMove.setOnClickListener(v -> moveToCurrentPage());
         mToolbar.findViewById(R.id.batch_edit_new_page).setOnClickListener(v -> {
@@ -153,6 +158,7 @@ public final class WorkspaceBatchEditor {
     public void close() {
         if (!mActive || mClosing) return;
         mClosing = true;
+        if (mFolderActions != null) mFolderActions.close();
         if (mDragging) mLauncher.getDragController().cancelDrag();
         restoreDraggedViews();
         for (WorkspaceSelectionBadge badge : mBadges.values()) badge.remove();
@@ -167,6 +173,7 @@ public final class WorkspaceBatchEditor {
         mToolbar = null;
         mCount = null;
         mMove = null;
+        mFolders = null;
         mActive = mDragging = false;
         mClosing = false;
         mPendingCleanup = true;
@@ -308,6 +315,11 @@ public final class WorkspaceBatchEditor {
         mWorkspace.post(this::refreshIcons);
     }
 
+    void onFolderActionCompleted() {
+        mSelected.clear();
+        refreshIcons();
+    }
+
     private int[][] plan(CellLayout target, List<BubbleTextView> icons, int x, int y) {
         if (target == null || mWorkspace.indexOfChild(target) < 0 || icons.isEmpty()
                 || mLauncher.isWorkspaceLocked() || LauncherPrefs.WORKSPACE_LOCK.get(mLauncher)) {
@@ -422,6 +434,7 @@ public final class WorkspaceBatchEditor {
         mCount.setText(count == 0 ? mLauncher.getString(R.string.batch_edit_select_apps)
                 : mLauncher.getResources().getQuantityString(R.plurals.batch_edit_count, count, count));
         mMove.setEnabled(count > 0 && !mDragging);
+        mFolders.setEnabled(!mDragging);
     }
 
     private void showNoSpace() {

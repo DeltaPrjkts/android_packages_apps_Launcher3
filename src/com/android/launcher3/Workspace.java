@@ -1014,10 +1014,14 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
         int newScreenId = LauncherAppState.getInstance(getContext())
                 .getModel().getModelDbController().getNewScreenId();
+        boolean isMultipage = cl instanceof MultipageCellLayout;
+        if (isMultipage && newScreenId % 2 != 0) {
+            newScreenId++;
+        }
         // Launcher database isn't aware of empty pages that are already bound, so we need to
         // skip those IDs manually.
         while (mWorkspaceScreens.containsKey(newScreenId)) {
-            newScreenId++;
+            newScreenId += isMultipage ? 2 : 1;
         }
 
         mWorkspaceScreens.put(newScreenId, cl);

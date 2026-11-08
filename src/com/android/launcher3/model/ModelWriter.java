@@ -226,6 +226,49 @@ public class ModelWriter {
         enqueueDeleteRunnable(new UpdateItemsRunnable(items, contentValues));
     }
 
+    public void ungroupFolderInDatabase(FolderInfo folder, ArrayList<ItemInfo> items) {
+        ArrayList<ContentValues> values = new ArrayList<>(items.size());
+        for (ItemInfo item : items) {
+            ContentValues position = new ContentValues();
+            position.put(Favorites.CONTAINER, item.container);
+            position.put(Favorites.CELLX, item.cellX);
+            position.put(Favorites.CELLY, item.cellY);
+            position.put(Favorites.RANK, item.rank);
+            position.put(Favorites.SCREEN, item.screenId);
+            values.add(position);
+        }
+        notifyOtherCallbacks(c -> c.bindItemsUpdated(new HashSet<>(items)));
+        notifyDelete(Collections.singleton(folder));
+        ModelVerifier verifier = new ModelVerifier();
+        enqueueDeleteRunnable(newModelTask(() -> {
+            try (SQLiteTransaction transaction = mModel.getModelDbController().newTransaction()) {
+                for (int i = 0; i < items.size(); i++) {
+                    if (mModel.getModelDbController().update(
+                            values.get(i), itemIdMatch(items.get(i).id)
+                                    + " AND " + Favorites.CONTAINER + "=" + folder.id, null) != 1) {
+                        throw new IllegalStateException("Folder item no longer exists");
+                    }
+                }
+                String emptyFolder = itemIdMatch(folder.id) + " AND NOT EXISTS (SELECT 1 FROM "
+                        + Favorites.TABLE_NAME + " WHERE " + Favorites.CONTAINER + "=" + folder.id + ")";
+                if (mModel.getModelDbController().delete(emptyFolder, null) != 1) {
+                    throw new IllegalStateException("Folder contents changed before ungrouping");
+                }
+                transaction.commit();
+            } catch (Exception e) {
+                Log.e(TAG, "Unable to ungroup folder", e);
+                mModel.forceReload();
+                return;
+            }
+            mBgDataModel.updateItems(items, mOwner);
+            mBgDataModel.removeItem(mContext, Collections.singleton(folder), mOwner);
+            if (folder.hasOption(FolderInfo.FLAG_CUSTOM_THUMBNAIL)) {
+                FolderThumbnailManager.delete(mContext, folder.id);
+            }
+            verifier.verifyModel();
+        }));
+    }
+
     /**
      * Move and/or resize item in the DB to a new <container, screen, cellX, cellY, spanX, spanY>
      */

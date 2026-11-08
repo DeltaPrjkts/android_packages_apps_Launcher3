@@ -53,6 +53,14 @@
             android:layout_weight="1"
             android:text="@string/batch_edit_move_here" />
         <Button
+            android:id="@+id/batch_edit_folders"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:text="@string/batch_edit_folders" />
+        <Button
             android:id="@+id/batch_edit_new_page"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="0dp"

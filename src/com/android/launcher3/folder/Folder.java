@@ -41,6 +41,7 @@ import android.appwidget.AppWidgetHostView;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Insets;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -1578,6 +1579,40 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
     /** Add an app or shortcut */
     public void addFolderContent(ItemInfo item) {
         addFolderContent(item, mInfo.getContents().size(), true);
+    }
+
+    public boolean isReadyForBatchEdit() {
+        return !mDestroyed && !mIsOpen && mState == STATE_CLOSED && !mIsDragInProgress;
+    }
+
+    public void addFolderContents(List<ItemInfo> items) {
+        ArrayList<ItemInfo> added = new ArrayList<>(items);
+        if (!isReadyForBatchEdit() || added.isEmpty()) {
+            throw new IllegalStateException("Folder is not available for batch insertion");
+        }
+        for (ItemInfo item : added) {
+            if (!willAccept(item) || mInfo.getContents().contains(item)) {
+                throw new IllegalArgumentException("Invalid folder item");
+            }
+        }
+        int firstRank = mInfo.getContents().size();
+        mInfo.getContents().addAll(added);
+        FolderGridOrganizer organizer = createFolderGridOrganizer(
+                mActivityContext.getDeviceProfile()).setFolderInfo(mInfo);
+        for (int i = 0; i < added.size(); i++) {
+            ItemInfo item = added.get(i);
+            item.rank = firstRank + i;
+            Point position = organizer.getPosForRank(item.rank);
+            item.cellX = position.x;
+            item.cellY = position.y;
+        }
+        mActivityContext.getModelWriter().moveItemsInDatabase(added, mInfo.id, 0);
+        if (mContent.areViewsBound()) mContent.bindItems(mInfo.getContents());
+        mItemsInvalidated = true;
+        updateTextViewFocus();
+        updateItemLocationsInDatabaseBatch(false);
+        mActivityContext.getModelWriter().notifyItemModified(mInfo);
+        mFolderIcon.onItemsChanged(true);
     }
 
     /** Add an app or shortcut for a specified rank */

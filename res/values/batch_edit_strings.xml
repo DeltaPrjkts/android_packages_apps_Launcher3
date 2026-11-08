@@ -2,13 +2,30 @@
 <!-- Copyright (C) 2026 Lunaris AOSP. SPDX-License-Identifier: Apache-2.0 -->
 <resources>
     <string name="batch_edit_done">Done</string>
-    <string name="batch_edit_hint">Tap apps to select. Drag a selected app to another page, or swipe and tap Move here.</string>
+    <string name="batch_edit_hint">Tap apps to select. Drag them to another page, or choose Move here or Folders.</string>
     <string name="batch_edit_move_here">Move here</string>
     <string name="batch_edit_new_page">New page</string>
     <string name="batch_edit_select_apps">Select apps</string>
     <string name="batch_edit_selected">Selected</string>
     <string name="batch_edit_not_selected">Not selected</string>
     <string name="batch_edit_no_space">Not enough room for all selected apps. Choose another page.</string>
+    <string name="batch_edit_folders">Folders</string>
+    <string name="batch_edit_create_folder">Create folder</string>
+    <string name="batch_edit_move_to_folder">Move to folder</string>
+    <string name="batch_edit_ungroup_folder">Ungroup folder</string>
+    <string name="batch_edit_folder_name">Folder name</string>
+    <string name="batch_edit_default_folder_name">Folder</string>
+    <string name="batch_edit_folder_on_page">%1$s · Page %2$d</string>
+    <string name="batch_edit_folder_in_dock">%1$s · Dock</string>
+    <string name="batch_edit_folder_minimum">Select at least two apps to create a folder.</string>
+    <string name="batch_edit_folder_select_apps">Select apps to move into a folder.</string>
+    <string name="batch_edit_folder_standard_icons">Folders accept standard 1 × 1 app icons and shortcuts. Resize larger icons before grouping them.</string>
+    <string name="batch_edit_no_folders">No folders available.</string>
+    <string name="batch_edit_folder_unavailable">The folder or selected apps have changed. Try again.</string>
+    <string name="batch_edit_folder_created">Folder created</string>
+    <string name="batch_edit_apps_grouped">Moved selected apps to %1$s</string>
+    <string name="batch_edit_folder_ungrouped">Moved apps from %1$s to the Home screen</string>
+    <string name="batch_edit_ungroup_message">Move all apps from %1$s onto the Home screen? New pages will be added if needed.</string>
     <plurals name="batch_edit_count">
         <item quantity="one">%d app selected</item>
         <item quantity="other">%d apps selected</item>
