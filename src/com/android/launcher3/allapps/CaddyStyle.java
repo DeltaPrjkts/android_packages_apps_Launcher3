@@ -36,7 +36,8 @@ final class CaddyStyle {
         float opacity = Math.max(0, Math.min(100,
                 LauncherPrefs.APP_DRAWER_OPACITY.get(context))) / 100f;
         int surface = ColorUtils.blendARGB(base, textColor(context), .12f);
-        boolean blurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+        boolean blurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled()
+                && LauncherPrefs.BLUR_DEPTH.get(context) > 0;
         int alpha;
         if (sheet) {
             alpha = Math.round(255 * (blurEnabled ? .48f + .26f * opacity : .95f));

@@ -19,4 +19,8 @@
     <string name="caddy_close">Close</string>
     <string name="caddy_save">Save</string>
     <string name="caddy_open_category">Open %1$s, %2$d apps</string>
+    <plurals name="caddy_app_count">
+        <item quantity="one">%1$d app</item>
+        <item quantity="other">%1$d apps</item>
+    </plurals>
 </resources>

@@ -92,9 +92,8 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     private final AllAppsStore.OnUpdateListener mAppsListener = () -> close(false);
 
     private ValueAnimator mCurrentAnimator;
+    private OneShotPreDrawListener mOpenListener;
     private float mStartScale = 0.92f;
-    private float mTargetTranslationX = 0f;
-    private float mTargetTranslationY = 0f;
     private float mScrimProgress = 0f;
     private int mLastBlurRadius = 0;
     private boolean mIsClosing = false;
@@ -151,9 +150,8 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         titleContainer.addView(mTitle, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
 
         if (!editing && !apps.isEmpty()) {
-            TextView countText = text(apps.size() == 1
-                    ? "1 app"
-                    : apps.size() + " apps", 12);
+            TextView countText = text(getResources().getQuantityString(
+                    R.plurals.caddy_app_count, apps.size(), apps.size()), 12);
             countText.setTextColor(ColorUtils.setAlphaComponent(CaddyStyle.textColor(getContext()), 140));
             countText.setPadding(0, dp(2), 0, 0);
             titleContainer.addView(countText, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
@@ -180,10 +178,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             mask.setColor(Color.WHITE);
             closeBtn.setBackground(new RippleDrawable(ColorStateList.valueOf(
                     ColorUtils.setAlphaComponent(CaddyStyle.textColor(getContext()), 50)), circle, mask));
-            closeBtn.setPadding(dp(7), dp(7), dp(7), dp(7));
+            closeBtn.setPadding(dp(15), dp(15), dp(15), dp(15));
             closeBtn.setContentDescription(getContext().getString(R.string.caddy_close));
             closeBtn.setOnClickListener(v -> close(true));
-            mHeading.addView(closeBtn, new LayoutParams(dp(32), dp(32)));
+            mHeading.addView(closeBtn, new LayoutParams(dp(48), dp(48)));
         }
         mPanel.addView(mHeading, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
@@ -326,7 +324,12 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             return;
         }
 
-        OneShotPreDrawListener.add(this, this::animateOpen);
+        mOpenListener = OneShotPreDrawListener.add(this, () -> {
+            mOpenListener = null;
+            if (mIsOpen && !mIsClosing && isAttachedToWindow()) {
+                animateOpen();
+            }
+        });
     }
 
     @Nullable
@@ -431,9 +434,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         float panelCenterX = panelLeft + panelWidth / 2f;
         float panelCenterY = panelTop + panelHeight / 2f;
 
-        float sourceCenterX = !mSourceRect.isEmpty() ? mSourceRect.centerX() : panelCenterX;
-        float sourceCenterY = !mSourceRect.isEmpty() ? mSourceRect.centerY() : (panelCenterY + dp(24));
-
         int childCount = mRecycler.getChildCount();
         Rect itemDragRect = new Rect();
         Rect iconBounds = new Rect();
@@ -449,11 +449,9 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             it.stagger = Math.min(0.18f, i * 0.035f);
 
             int adapterPos = mRecycler.getChildAdapterPosition(child);
-            if (adapterPos == RecyclerView.NO_POSITION) {
-                adapterPos = i;
-            }
-
-            View sourcePreview = findSourcePreviewIcon(adapterPos);
+            int appIndex = adapterPos >= 0 && adapterPos < mFilteredApps.size()
+                    ? mApps.indexOf(mFilteredApps.get(adapterPos)) : -1;
+            View sourcePreview = findSourcePreviewIcon(appIndex);
 
             dragLayer.getDescendantRectRelativeToSelf(child, itemDragRect);
 
@@ -579,8 +577,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         }
 
         mStartScale = 0.92f;
-        mTargetTranslationX = 0f;
-        mTargetTranslationY = 0f;
 
         mPanel.setPivotX(targetWidth / 2f);
         mPanel.setPivotY(targetHeight / 2f);
@@ -590,10 +586,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
         applyAnimationProgress(0f);
 
-        if (mCurrentAnimator != null) {
-            mCurrentAnimator.cancel();
-            mCurrentAnimator = null;
-        }
+        cancelAnimation();
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(300);
         animator.setInterpolator(OPEN_INTERPOLATOR);
@@ -604,9 +597,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                if (mCurrentAnimator == animation) {
-                    mCurrentAnimator = null;
+                if (mCurrentAnimator != animation) {
+                    return;
                 }
+                mCurrentAnimator = null;
                 applyAnimationProgress(1f);
                 resetIconTransitions();
                 mPanel.setPanelBackgroundAlpha(1f);
@@ -645,15 +639,8 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             if (it.view == null)
                 continue;
 
-            float iconProgress;
-            if (mIsClosing) {
-                float iconCloseProgress = Utilities.boundToRange(
-                        ((1f - progress) - it.stagger) / (1f - it.stagger), 0f, 1f);
-                iconProgress = 1f - iconCloseProgress;
-            } else {
-                iconProgress = Utilities.boundToRange(
-                        (progress - it.stagger) / (1f - it.stagger), 0f, 1f);
-            }
+            float iconProgress = Utilities.boundToRange(
+                    (progress - it.stagger) / (1f - it.stagger), 0f, 1f);
 
             float tx = Utilities.mapRange(iconProgress, it.targetDx, 0f);
             float ty = Utilities.mapRange(iconProgress, it.targetDy, 0f);
@@ -689,11 +676,13 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         if (appsView == null || !appsView.isAttachedToWindow() || !appsView.isHardwareAccelerated()) {
             return;
         }
-        if (!CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled()) {
+        if (!CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled()
+                || LauncherPrefs.BLUR_DEPTH.get(getContext()) <= 0) {
+            mLastBlurRadius = 0;
             appsView.setRenderEffect(null);
             return;
         }
-        float targetBlurRadius = dp(24);
+        float targetBlurRadius = Math.min(dp(24), LauncherPrefs.BLUR_DEPTH.get(getContext()));
         int rounded = Math.round(progress * targetBlurRadius);
         if (rounded <= 0 || progress <= 0f) {
             if (mLastBlurRadius != 0) {
@@ -747,7 +736,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         if (!mEditing) {
             GridLayoutManager layout = (GridLayoutManager) mRecycler.getLayoutManager();
             int count = mFilteredApps.size();
-            int span = (count <= 3 && count > 0) ? count : 4;
+            int maxSpan = Math.max(1, Math.min(4,
+                    (mPanel.getLayoutParams().width - mPanel.getPaddingLeft()
+                            - mPanel.getPaddingRight()) / dp(80)));
+            int span = Math.min(Math.max(1, count), maxSpan);
             if (layout.getSpanCount() != span) {
                 layout.setSpanCount(span);
             }
@@ -774,7 +766,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (mIsClosing) {
+        if (mIsClosing || mCurrentAnimator != null) {
             return true;
         }
         return super.dispatchTouchEvent(ev);
@@ -818,7 +810,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
     @Override
     protected void handleClose(boolean animate) {
-        if (mIsClosing) {
+        if (mIsClosing && animate) {
             return;
         }
         mIsClosing = true;
@@ -827,15 +819,11 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             mPanel.postInvalidate();
         }
 
-        float currentProgress = 1f;
-        if (mCurrentAnimator != null) {
-            currentProgress = (float) mCurrentAnimator.getAnimatedValue();
-            mCurrentAnimator.cancel();
-            mCurrentAnimator = null;
-        }
+        float currentProgress = mScrimProgress;
+        cancelAnimation();
         getContext().getSystemService(InputMethodManager.class)
                 .hideSoftInputFromWindow(getWindowToken(), 0);
-        if (!animate || !ValueAnimator.areAnimatorsEnabled()) {
+        if (!animate || !ValueAnimator.areAnimatorsEnabled() || currentProgress <= 0f) {
             if (mPanel != null) {
                 mPanel.setAlpha(0f);
                 mPanel.setPanelBackgroundAlpha(0f);
@@ -848,13 +836,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     }
 
     private void animateClose(float fromProgress) {
-        if (mCurrentAnimator != null) {
-            mCurrentAnimator.cancel();
-            mCurrentAnimator = null;
-        }
+        cancelAnimation();
         mIsOpenAndSettled = false;
 
-        if (fromProgress >= 0.95f || mIconTransitions.isEmpty()) {
+        if (fromProgress >= 1f || mIconTransitions.isEmpty()) {
             resetIconTransitions();
             mPanel.setTranslationX(0f);
             mPanel.setTranslationY(0f);
@@ -875,9 +860,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                if (mCurrentAnimator == animation) {
-                    mCurrentAnimator = null;
+                if (mCurrentAnimator != animation) {
+                    return;
                 }
+                mCurrentAnimator = null;
                 if (mPanel != null) {
                     mPanel.setAlpha(0f);
                     mPanel.setPanelBackgroundAlpha(0f);
@@ -888,6 +874,18 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         });
         mCurrentAnimator = animator;
         animator.start();
+    }
+
+    private void cancelAnimation() {
+        if (mOpenListener != null) {
+            mOpenListener.removeListener();
+            mOpenListener = null;
+        }
+        if (mCurrentAnimator != null) {
+            ValueAnimator animator = mCurrentAnimator;
+            mCurrentAnimator = null;
+            animator.cancel();
+        }
     }
 
     private void remove() {
@@ -932,10 +930,9 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
     @Override
     protected void onDetachedFromWindow() {
-        if (mCurrentAnimator != null) {
-            mCurrentAnimator.cancel();
-            mCurrentAnimator = null;
-        }
+        cancelAnimation();
+        mIsOpen = false;
+        mIsOpenAndSettled = false;
         cleanupBlur();
         AllAppsStore store = mActivityContext.getActivityComponent().getAppsStore();
         store.unregisterIconContainer(mRecycler);
@@ -974,7 +971,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         TextView button = text(getContext().getString(label), 14);
         button.setGravity(Gravity.CENTER);
         button.setPadding(dp(14), 0, dp(14), 0);
-        button.setMinHeight(dp(36));
+        button.setMinHeight(dp(48));
         button.setMinWidth(dp(48));
         button.setBackground(CaddyStyle.background(getContext(), false));
         button.setFocusable(true);
@@ -1062,6 +1059,9 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
         private void onCrossWindowBlurEnabledChanged(boolean enabled) {
             mCrossWindowBlurEnabled = enabled;
+            setBackground(CaddyStyle.background(getContext(), true));
+            setPanelBackgroundAlpha(mBgAlpha);
+            updateAppsViewBlur(mScrimProgress);
             updateBlurState();
             postInvalidate();
         }
