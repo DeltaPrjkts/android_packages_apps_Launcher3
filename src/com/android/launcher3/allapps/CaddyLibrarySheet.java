@@ -128,7 +128,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         setClipToPadding(false);
 
         mPanel = new PanelView(getContext());
-        mPanel.setClipChildren(false);
+        mPanel.setClipChildren(true);
         mPanel.setClipToPadding(false);
         addView(mPanel, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
@@ -192,7 +192,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             mEditingSelection = new LinearLayout(getContext());
             mEditingSelection.setGravity(Gravity.CENTER_VERTICAL);
             mEditingSelection.addView(mSelectionCount, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
-            TextView reset = button(R.string.caddy_use_random);
+            TextView reset = button(R.string.caddy_use_suggestions);
             reset.setOnClickListener(v -> {
                 mSelected.clear();
                 updateSelectionCount();
@@ -265,7 +265,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             }
         };
         mRecycler.setClipToPadding(false);
-        mRecycler.setClipChildren(false);
+        mRecycler.setClipChildren(true);
         mRecycler.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         mRecycler.setLayoutManager(editing ? new LinearLayoutManager(getContext())
                 : new GridLayoutManager(getContext(), initialSpan));
@@ -405,8 +405,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         if (mRecycler == null || mPanel == null) {
             return;
         }
-        mRecycler.setClipChildren(false);
-
         BaseDragLayer dragLayer = mActivityContext.getDragLayer();
         if (dragLayer == null) {
             return;
@@ -570,6 +568,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         mPanel.setPivotY(targetHeight / 2f);
 
         prepareIconTransitions();
+        setContentClippingEnabled(false);
         hideSourceView();
 
         applyAnimationProgress(0f);
@@ -600,9 +599,15 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         hideSourceView();
         applyAnimationProgress(1f);
         resetIconTransitions();
-        mRecycler.setClipChildren(true);
+        setContentClippingEnabled(true);
         mPanel.requestFocus();
         announceAccessibilityChanges();
+    }
+
+    private void setContentClippingEnabled(boolean enabled) {
+        mPanel.setClipChildren(enabled);
+        mPanel.setClipToOutline(enabled);
+        mRecycler.setClipChildren(enabled);
     }
 
     private void applyAnimationProgress(float progress) {
@@ -823,6 +828,8 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
     private void animateClose(float fromProgress) {
         cancelAnimation();
+        mRecycler.stopScroll();
+        setContentClippingEnabled(false);
 
         if (fromProgress >= 1f || mIconTransitions.isEmpty()) {
             resetIconTransitions();
@@ -975,8 +982,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             if (bg != null) {
                 bg.setAlpha(Math.round(mBgAlpha * 255));
             }
-            setElevation(dp(16 * mBgAlpha));
-            setClipToOutline(mBgAlpha >= 0.99f);
             invalidate();
         }
 
@@ -987,7 +992,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             setBackground(CaddyStyle.background(context, true));
             setClickable(true);
             setFocusableInTouchMode(true);
-            setClipToOutline(false);
+            setClipToOutline(true);
             setElevation(0f);
             setOutlineProvider(new ViewOutlineProvider() {
                 @Override

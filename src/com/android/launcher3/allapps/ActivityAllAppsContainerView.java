@@ -367,12 +367,29 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
             mSearchUiDelegate.onInitializeSearchBar();
         }
         mActivityContext.addOnDeviceProfileChangeListener(this);
+        refreshCaddySuggestions();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         mActivityContext.removeOnDeviceProfileChangeListener(this);
+        for (AdapterHolder holder : mAH) {
+            if (holder != null) holder.mAppsList.cancelCaddySuggestions();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) refreshCaddySuggestions();
+    }
+
+    public void refreshCaddySuggestions() {
+        for (int type = AdapterHolder.MAIN; type <= AdapterHolder.WORK; type++) {
+            AdapterHolder holder = mAH.get(type);
+            if (holder != null) holder.mAppsList.refreshCaddySuggestions();
+        }
     }
 
     public SearchUiManager getSearchUiManager() {

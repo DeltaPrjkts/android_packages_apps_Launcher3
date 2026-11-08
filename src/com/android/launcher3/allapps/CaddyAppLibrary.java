@@ -7,22 +7,22 @@ import com.android.launcher3.R;
 import com.android.launcher3.model.data.AppInfo;
 import com.android.launcher3.pm.UserCache;
 import com.android.launcher3.util.AppsListUtils;
+import com.android.launcher3.util.LabelComparator;
+import com.android.launcher3.util.PackageUserKey;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 public final class CaddyAppLibrary {
     public static final int FAVORITE_COUNT = 4;
-    private static final long SUGGESTION_SEED = new Random().nextLong();
 
     private CaddyAppLibrary() { }
 
@@ -42,7 +42,9 @@ public final class CaddyAppLibrary {
         int[] order = {R.string.social_category_label, R.string.caddy_games,
                 R.string.caddy_utilities, R.string.caddy_entertainment, R.string.caddy_lifestyle,
                 R.string.caddy_finance, R.string.productivity_category_label,
-                R.string.caddy_multimedia, R.string.news_category_label, R.string.caddy_travel};
+                R.string.caddy_multimedia, R.string.news_category_label, R.string.caddy_travel,
+                R.string.caddy_shopping, R.string.caddy_health, R.string.caddy_education,
+                R.string.caddy_business};
         for (int label : order) {
             String title = context.getString(label);
             List<AppInfo> categoryApps = categories.remove(title);
@@ -111,27 +113,50 @@ public final class CaddyAppLibrary {
                 .putString(LauncherPrefs.CADDY_FAVORITES.getSharedPrefKey(), saved.toString()).apply();
     }
 
-    public static List<AppInfo> suggestions(Context context, List<AppInfo> apps) {
+    public static List<AppInfo> suggestions(Context context, List<AppInfo> apps,
+            Map<PackageUserKey, Double> scores) {
+        return rankSuggestions(apps, favorites(context, apps), scores,
+                app -> appKey(context, app));
+    }
+
+    static List<AppInfo> rankSuggestions(List<AppInfo> apps, Set<String> favorites,
+            Map<PackageUserKey, Double> scores,
+            java.util.function.Function<AppInfo, String> keyForApp) {
         List<AppInfo> result = new ArrayList<>();
-        Set<String> favorites = favorites(context, apps);
+        Set<PackageUserKey> selectedPackages = new HashSet<>();
         for (String key : favorites) {
             for (AppInfo app : apps) {
-                if (key.equals(appKey(context, app))) {
+                if (result.size() == FAVORITE_COUNT) return List.copyOf(result);
+                if (key.equals(keyForApp.apply(app))) {
                     result.add(app);
+                    selectedPackages.add(PackageUserKey.fromItemInfo(app));
                     break;
                 }
             }
         }
-        List<AppInfo> shuffled = new ArrayList<>(apps);
-        Collections.shuffle(shuffled, new Random(SUGGESTION_SEED));
-        for (AppInfo app : shuffled) {
+        List<AppInfo> ranked = new ArrayList<>(apps);
+        LabelComparator labels = new LabelComparator();
+        ranked.sort((a, b) -> {
+            int order = Double.compare(scores.getOrDefault(PackageUserKey.fromItemInfo(b), 0d),
+                    scores.getOrDefault(PackageUserKey.fromItemInfo(a), 0d));
+            if (order != 0) return order;
+            order = labels.compare(sortingTitle(a), sortingTitle(b));
+            return order != 0 ? order : keyForApp.apply(a).compareTo(keyForApp.apply(b));
+        });
+        for (AppInfo app : ranked) {
             if (result.size() == FAVORITE_COUNT) {
                 break;
             }
-            if (!favorites.contains(appKey(context, app))) {
+            if (selectedPackages.add(PackageUserKey.fromItemInfo(app))) {
                 result.add(app);
             }
         }
         return List.copyOf(result);
+    }
+
+    private static String sortingTitle(AppInfo app) {
+        CharSequence title = app.appTitle != null && app.appTitle.length() > 0
+                ? app.appTitle : app.title;
+        return title == null ? "" : title.toString();
     }
 }

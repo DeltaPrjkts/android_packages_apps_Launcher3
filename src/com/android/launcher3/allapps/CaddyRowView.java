@@ -20,7 +20,26 @@ import com.android.launcher3.views.ActivityContext;
 public class CaddyRowView extends LinearLayout {
     private final ActivityContext mActivityContext;
     private OnFocusChangeListener mFocusListener;
+    private boolean mTouchActive;
 
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) mTouchActive = true;
+        try {
+            return super.dispatchTouchEvent(event);
+        } finally {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                mTouchActive = false;
+            }
+        }
+    }
+
+    boolean isInteracting() {
+        return mTouchActive || (getParent() instanceof RecyclerView recyclerView
+                && (recyclerView.isComputingLayout()
+                || recyclerView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE));
+    }
     public CaddyRowView(Context context) {
         super(context);
         mActivityContext = ActivityContext.lookupContext(context);
@@ -29,6 +48,12 @@ public class CaddyRowView extends LinearLayout {
         setPadding(0, 0, 0, dp(8));
         setLayoutParams(new RecyclerView.LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        mTouchActive = false;
+        super.onDetachedFromWindow();
     }
 
     public void bind(BaseAllAppsAdapter.AdapterItem item, OnFocusChangeListener focusListener,

@@ -1190,6 +1190,7 @@ public class Launcher extends StatefulActivity<LauncherState>
         if (mPrevLauncherState != state && ALL_APPS.equals(state)
                 // Making sure mAllAppsSessionLogId is null to avoid double logging.
                 && mAllAppsSessionLogId == null) {
+            getAppsView().refreshCaddySuggestions();
             // creates new instance ID since new all apps session is started.
             mAllAppsSessionLogId = new InstanceIdSequence().newInstanceId();
             if (getAllAppsEntryEvent().isPresent()) {

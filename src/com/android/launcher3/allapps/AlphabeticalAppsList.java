@@ -31,11 +31,13 @@ import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.style.ImageSpan;
 import android.util.Log;
+import android.view.View;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.DiffUtil;
 
+import com.android.launcher3.AbstractFloatingView;
 import com.android.launcher3.Flags;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
@@ -112,6 +114,7 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
     private final SpannableString mPrivateProfileDividerBadge;
     private BaseAllAppsAdapter mAdapter;
     private AppInfoComparator mAppNameComparator;
+    private final CaddyAppSuggestions mCaddySuggestions = new CaddyAppSuggestions();
     private int mNumAppsPerRowAllApps;
     private int mNumAppRowsInAdapter;
     private Predicate<ItemInfo> mItemFilter;
@@ -516,8 +519,9 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
         }
 
         Context context = mActivityContext.asContext();
+        refreshCaddySuggestions();
         mAdapterItems.add(AdapterItem.asCaddyFavorites(appList,
-                CaddyAppLibrary.suggestions(context, appList)));
+                CaddyAppLibrary.suggestions(context, appList, mCaddySuggestions.getScores())));
         int position = startPosition + 1;
         List<CaddyAppLibrary.Category> categories = CaddyAppLibrary.categories(context, appList);
         for (int i = 0; i < categories.size(); i += 2) {
@@ -527,6 +531,44 @@ public class AlphabeticalAppsList implements AllAppsStore.OnUpdateListener {
         }
 
         return position;
+    }
+
+    public void refreshCaddySuggestions() {
+        Context context = mActivityContext.asContext();
+        if (LauncherPrefs.DRAWER_LIST.get(context) || hasSearchResults() || mApps.isEmpty()
+                || (mWorkProviderManager != null && !mWorkProviderManager.shouldShowWorkApps())) {
+            return;
+        }
+        updateCaddySuggestions();
+        mCaddySuggestions.refresh(context, mApps, this::updateCaddySuggestions);
+    }
+
+    public void cancelCaddySuggestions() {
+        mCaddySuggestions.cancel();
+    }
+
+    private void updateCaddySuggestions() {
+        if (hasSearchResults() || AbstractFloatingView.getAnyView(mActivityContext,
+                AbstractFloatingView.TYPE_CADDY_LIBRARY | AbstractFloatingView.TYPE_ACTION_POPUP)
+                != null
+                || (mActivityContext.getDragController() != null
+                && mActivityContext.getDragController().isDragging())) {
+            return;
+        }
+        Context context = mActivityContext.asContext();
+        for (int i = 0; i < mAdapterItems.size(); i++) {
+            AdapterItem item = mAdapterItems.get(i);
+            if (item.viewType != BaseAllAppsAdapter.VIEW_TYPE_CADDY_FAVORITES) continue;
+            List<AppInfo> suggestions = CaddyAppLibrary.suggestions(context, item.caddyApps,
+                    mCaddySuggestions.getScores());
+            if (!suggestions.equals(item.caddySuggestions)) {
+                View row = mAdapter == null ? null
+                        : mAdapter.getLayoutManager().findViewByPosition(i);
+                if (row instanceof CaddyRowView caddyRow && caddyRow.isInteracting()) return;
+                mAdapterItems.set(i, AdapterItem.asCaddyFavorites(item.caddyApps, suggestions));
+                if (mAdapter != null) mAdapter.notifyItemChanged(i);
+            }
+        }
     }
 
     private boolean isPrivateSpaceApp(AppInfo appInfo) {
