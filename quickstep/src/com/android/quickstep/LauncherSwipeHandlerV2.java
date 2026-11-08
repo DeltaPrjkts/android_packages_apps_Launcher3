@@ -163,6 +163,13 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
         if (mHandOffAnimationToHome || !canUseWorkspaceView || appCanEnterPip || mIsSwipeForSplit) {
             return new LauncherHomeAnimationFactory() {
 
+                @Override
+                protected float getWindowAlpha(float progress) {
+                    return !CosAppAnimation.isEnabled(mContext) && targetTaskView == null
+                            ? NothingAppAnimation.getFallbackWindowAlpha(progress)
+                            : super.getWindowAlpha(progress);
+                }
+
                 @Nullable
                 @Override
                 public TaskView getTargetTaskView() {

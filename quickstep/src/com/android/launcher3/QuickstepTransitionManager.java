@@ -2182,6 +2182,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 .getPrimaryValue(dp.getDeviceProperties().getAvailableWidthPx(), dp.getDeviceProperties().getAvailableHeightPx());
         float secondaryDimension = orientationHandler
                 .getSecondaryValue(dp.getDeviceProperties().getAvailableWidthPx(), dp.getDeviceProperties().getAvailableHeightPx());
+        if (!mCosAppAnimations) {
+            return NothingAppAnimation.getDefaultWindowTargetRect(
+                    dp.getWorkspaceIconProfile().getIconSizePx(), primaryDimension,
+                    secondaryDimension);
+        }
         final float targetX = primaryDimension / 2f;
         final float targetY = secondaryDimension - dp.hotseatBarSizePx;
         return new RectF(targetX - halfIconSize, targetY - halfIconSize,
@@ -2395,7 +2400,14 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
             // target rect.
             anim.addOnUpdateListener(new SpringAnimRunner(
                     targets, targetRect, closingWindowStartRect, closingWindowOriginalRect,
-                    startWindowCornerRadius));
+                    startWindowCornerRadius) {
+                @Override
+                protected float getWindowAlpha(float progress) {
+                    return useNothingSpring
+                            ? NothingAppAnimation.getFallbackWindowAlpha(progress)
+                            : super.getWindowAlpha(progress);
+                }
+            });
         }
 
         // Use a fixed velocity to start the animation. Let the spring finish independently:
@@ -2632,7 +2644,13 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
         boolean playWorkspaceReveal = true;
         boolean skipAllAppsScale = false;
-        if (mLauncher.isInState(OVERVIEW)) {
+        if (!mCosAppAnimations && islandTarget == null
+                && (playFallBackAnimation || mLauncher.isInState(OVERVIEW))) {
+            rectFSpringAnim = getClosingWindowAnimators(anim, appTargets,
+                    playFallBackAnimation ? launcherView : null, new PointF(),
+                    startRect, startWindowCornerRadius);
+            playWorkspaceReveal = !mLauncher.isInState(OVERVIEW);
+        } else if (mLauncher.isInState(OVERVIEW)) {
             playWorkspaceReveal = false;
         } else if (!playFallBackAnimation) {
             rectFSpringAnim = islandTarget == null
@@ -2846,7 +2864,8 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 result.setAnimation(null, mLauncher, mOnEndCallback::executeAllAndDestroy, false);
                 return;
             }
-            if (!mCosAppAnimations && (!(mV.getParent() instanceof ViewGroup)
+            if (!mCosAppAnimations && (!ValueAnimator.areAnimatorsEnabled()
+                    || !(mV.getParent() instanceof ViewGroup)
                     || RemoveAnimationSettingsTracker.INSTANCE.get(mLauncher)
                             .isRemoveAnimationEnabled())) {
                 result.setAnimation(null, mLauncher, mOnEndCallback::executeAllAndDestroy, false);
@@ -2901,7 +2920,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 addCujInstrumentation(windowSpring, launchingFromWidget
                         ? Cuj.CUJ_LAUNCHER_APP_LAUNCH_FROM_WIDGET
                         : Cuj.CUJ_LAUNCHER_APP_LAUNCH_FROM_ICON);
-                skipFirstFrame = false;
+                skipFirstFrame = launchingFromWidget;
             } else if (launchingFromWidget) {
                 composeCosWidgetLaunchAnimator(anim, (LauncherAppWidgetHostView) mV, appTargets,
                         wallpaperTargets, nonAppTargets, launcherClosing);

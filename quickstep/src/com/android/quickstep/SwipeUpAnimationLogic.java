@@ -212,6 +212,11 @@ public abstract class SwipeUpAnimationLogic implements
                     dp.getDeviceProperties().getAvailableWidthPx(),
                     dp.getDeviceProperties().getAvailableHeightPx()
             );
+            if (!CosAppAnimation.isEnabled(mContext)) {
+                return NothingAppAnimation.getDefaultWindowTargetRect(
+                        dp.getWorkspaceIconProfile().getIconSizePx(), primaryDimension,
+                        secondaryDimension);
+            }
             final float targetX =  primaryDimension / 2f;
             final float targetY = secondaryDimension - dp.hotseatBarSizePx;
             // Fallback to animate to center of screen.

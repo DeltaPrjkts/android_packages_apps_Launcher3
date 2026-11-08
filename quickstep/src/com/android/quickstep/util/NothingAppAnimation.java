@@ -27,6 +27,7 @@ public final class NothingAppAnimation {
     public static final float DAMPING_RATIO = 1f;
     public static final float OPEN_ALPHA_END = 0.15f;
     public static final float CLOSE_ALPHA_END = 0.85f;
+    private static final float NO_TARGET_CLOSE_ALPHA_END = 0.98f;
     public static final float SHAPE_PROGRESS_START = 0.9f;
     public static final long WORKSPACE_DURATION_MS = 350;
     public static final long WORKSPACE_FADE_DURATION_MS = 200;
@@ -38,6 +39,20 @@ public final class NothingAppAnimation {
         float t = clamp(progress / (opening ? OPEN_ALPHA_END : CLOSE_ALPHA_END));
         float alpha = t * t * t;
         return opening ? alpha : 1f - alpha;
+    }
+
+    public static float getFallbackWindowAlpha(float progress) {
+        float t = clamp(progress / NO_TARGET_CLOSE_ALPHA_END);
+        return 1f - t * t * t;
+    }
+
+    public static RectF getDefaultWindowTargetRect(int iconSizePx, float primaryDimension,
+            float secondaryDimension) {
+        int halfSize = iconSizePx / 4;
+        float centerX = primaryDimension / 2f;
+        float centerY = secondaryDimension / 3f;
+        return new RectF(centerX - halfSize, centerY - halfSize,
+                centerX + halfSize, centerY + halfSize);
     }
 
     public static float getSizeProgress(float progress) {
