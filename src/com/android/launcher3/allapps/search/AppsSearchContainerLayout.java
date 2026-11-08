@@ -19,21 +19,17 @@ import static android.view.View.MeasureSpec.EXACTLY;
 import static android.view.View.MeasureSpec.getSize;
 import static android.view.View.MeasureSpec.makeMeasureSpec;
 
-import static com.android.launcher3.Utilities.prefixTextWithIcon;
 import static com.android.launcher3.icons.IconNormalizer.ICON_VISIBLE_AREA_FACTOR;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.PaintDrawable;
-import android.net.Uri;
 import android.text.Editable;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
@@ -99,10 +95,22 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     private final Consumer<Boolean> mCrossWindowBlurListener =
             this::onCrossWindowBlurEnabledChanged;
 
-    private boolean mIsUniversalSearch;
     private Drawable mSearchIcon;
     private Drawable mClearIcon;
     private Drawable mSpacerIcon;
+    private final ThemeManager.ThemeChangeListener mThemeChangeListener = () -> {
+        mSearchIcon = null;
+        mClearIcon = null;
+        updateSearchBarStyle();
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener mPreferenceListener =
+            (preferences, key) -> {
+                if (LauncherPrefs.BLUR_DEPTH.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)) {
+                    updateSearchBarStyle();
+                }
+            };
 
     private final TextWatcher mTextWatcher = new TextWatcher() {
         @Override
@@ -113,9 +121,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
         @Override
         public void afterTextChanged(Editable s) {
-            if (isUniversalSearch()) {
-                updateUniversalSearchDrawablesAndGravity();
-            }
+            updateUniversalSearchDrawablesAndGravity();
         }
     };
 
@@ -143,12 +149,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
-                if (isUniversalSearch()) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), view.getHeight() / 2f);
-                } else {
-                    float cornerRadius = getCornerRadius(getContext());
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius);
-                }
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), view.getHeight() / 2f);
             }
         });
         setClipToOutline(true);
@@ -161,11 +162,12 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
         CrossWindowBlurListeners.getInstance().addListener(
                 getContext().getMainExecutor(), mCrossWindowBlurListener);
-        updateBlurPreferences();
+        ThemeManager.INSTANCE.get(getContext()).addChangeListener(mThemeChangeListener);
+        LauncherPrefs.getPrefs(getContext()).registerOnSharedPreferenceChangeListener(
+                mPreferenceListener);
         if (mAppsView != null) {
             mAppsView.getAppsStore().addUpdateListener(this);
             mSearchBarController.refreshSearchResult();
-            setUniversalSearch(mAppsView.isUniversalSearchActive());
         }
         updateSearchBarStyle();
         postInvalidate();
@@ -175,6 +177,9 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     protected void onDetachedFromWindow() {
         mBackdropBlur.onDetachedFromWindow();
         CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
+        ThemeManager.INSTANCE.get(getContext()).removeChangeListener(mThemeChangeListener);
+        LauncherPrefs.getPrefs(getContext()).unregisterOnSharedPreferenceChangeListener(
+                mPreferenceListener);
         super.onDetachedFromWindow();
         if (mAppsView != null) {
             mAppsView.getAppsStore().removeUpdateListener(this);
@@ -192,7 +197,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
         if (visibility == VISIBLE) {
-            updateBlurPreferences();
+            updateSearchBarStyle();
             postInvalidate();
         } else {
             hideBlur();
@@ -228,24 +233,13 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     }
 
     private void updateBlurState() {
-        mBackdropBlur.setEnabled(canDrawBlur() && isUniversalSearch());
+        mBackdropBlur.setEnabled(canDrawBlur());
         mBackdropBlur.setSurfaceAlpha(Math.round(255f
                 * Utilities.boundToRange(getAlpha(), 0f, 1f)));
     }
 
     private void hideBlur() {
         mBackdropBlur.setEnabled(false);
-    }
-
-    public void setUniversalSearch(boolean active) {
-        mIsUniversalSearch = active;
-        updateSearchBarStyle();
-        requestLayout();
-        invalidate();
-    }
-
-    public boolean isUniversalSearch() {
-        return true;
     }
 
     private void updateUniversalSearchDrawablesAndGravity() {
@@ -359,8 +353,6 @@ public class AppsSearchContainerLayout extends ExtendedEditText
             setTranslationX(shift);
         }
 
-        updateSearchBarStyle();
-
         setOnTouchListener(new OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -390,43 +382,20 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (isUniversalSearch() && h > 0) {
+        if (h > 0) {
             mBackgroundTintDrawable.setCornerRadius(h / 2f);
         }
     }
 
     @Override
     public void draw(Canvas canvas) {
-        if (isUniversalSearch() && canvas.isHardwareAccelerated()) {
+        if (canvas.isHardwareAccelerated()) {
             updateBlurState();
             if (mBackdropBlur.isEnabled()) {
                 mBackdropBlur.draw(canvas, 0, 0, getWidth(), getHeight(), getHeight() / 2f);
             }
         }
         super.draw(canvas);
-    }
-
-    private void setUpBackground(boolean showQSBStyle) {
-        Context context = getContext();
-        float cornerRadius = getCornerRadius(context);
-
-        int color = Themes.getAttrColor(context,
-                showQSBStyle && LauncherPrefs.DOCK_THEME.get(context)
-                        ? R.attr.qsbFillColorThemed
-                        : R.attr.qsbFillColor);
-
-        PaintDrawable pd = new PaintDrawable(color);
-        pd.setCornerRadius(cornerRadius);
-        setClipToOutline(cornerRadius > 0);
-        setBackground(pd);
-    }
-
-    private float getCornerRadius(Context context) {
-        Resources res = context.getResources();
-        float qsbWidgetHeight = res.getDimension(R.dimen.qsb_widget_height);
-        float qsbWidgetPadding = res.getDimension(R.dimen.qsb_widget_vertical_padding);
-        float innerHeight = qsbWidgetHeight - 2 * qsbWidgetPadding;
-        return (innerHeight / 2) * ((float)LauncherPrefs.SEARCH_RADIUS_SIZE.get(context) / 100f);
     }
 
     @Override
@@ -442,7 +411,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         if (isAttachedToWindow()) {
             mAppsView.getAppsStore().addUpdateListener(this);
         }
-        setUniversalSearch(appsView.isUniversalSearchActive());
+        updateSearchBarStyle();
     }
 
     @Override
@@ -481,9 +450,6 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
     @Override
     public void preDispatchKeyEvent(KeyEvent event) {
-        if (mAppsView != null && !mAppsView.isUniversalSearchActive()) {
-            mAppsView.setUniversalSearchActive(true);
-        }
         // Determine if the key event was actual text, if so, focus the search bar and then dispatch
         // the key normally so that it can process this key event
         if (!mSearchBarController.isSearchFieldFocused() &&
@@ -495,7 +461,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
                 boolean gotKey = TextKeyListener.getInstance().onKeyDown(this, mSearchQueryBuilder,
                         event.getKeyCode(), event);
                 if (gotKey && mSearchQueryBuilder.length() > 0) {
-                    mSearchBarController.focusSearchField();
+                    focusSearchField();
                 }
             }
         }
@@ -539,7 +505,10 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     @Override
     public void setInsets(Rect insets) {
         MarginLayoutParams mlp = (MarginLayoutParams) getLayoutParams();
-        mlp.topMargin = getResources().getDimensionPixelSize(R.dimen.all_apps_search_bar_margin_top);
+        boolean atBottom = mlp instanceof android.widget.RelativeLayout.LayoutParams relative
+                && relative.getRule(android.widget.RelativeLayout.ALIGN_PARENT_BOTTOM) != 0;
+        mlp.topMargin = atBottom ? 0
+                : getResources().getDimensionPixelSize(R.dimen.all_apps_search_bar_margin_top);
         requestLayout();
     }
 

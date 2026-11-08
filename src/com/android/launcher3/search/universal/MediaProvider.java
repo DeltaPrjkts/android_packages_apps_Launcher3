@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Environment;
 import android.os.Process;
 import android.provider.MediaStore;
 import android.text.TextUtils;
@@ -20,6 +21,7 @@ import com.android.launcher3.LauncherPrefs;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class MediaProvider implements SearchProvider {
@@ -111,7 +113,8 @@ public class MediaProvider implements SearchProvider {
         Uri collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL);
         String selection = "(" + MediaStore.Files.FileColumns.RELATIVE_PATH + " LIKE ? OR "
                 + MediaStore.Files.FileColumns.RELATIVE_PATH + " LIKE ?) AND "
-                + MediaStore.Files.FileColumns.DISPLAY_NAME + " IS NOT NULL";
+                + MediaStore.Files.FileColumns.DISPLAY_NAME + " IS NOT NULL AND "
+                + MediaStore.Files.FileColumns.MIME_TYPE + " IS NOT NULL";
         String[] args = new String[]{"Download/%", "%/Download/%"};
         String sortOrder = MediaStore.Files.FileColumns.DATE_MODIFIED + " DESC";
         try (Cursor c = context.getContentResolver().query(collection, PROJECTION,
@@ -148,7 +151,7 @@ public class MediaProvider implements SearchProvider {
                     result.thumbnail = result.icon != null;
                 }
                 if (result.icon == null) {
-                    boolean isApk = name != null && name.toLowerCase().endsWith(".apk");
+                    boolean isApk = name.toLowerCase(Locale.ROOT).endsWith(".apk");
                     result.iconRes = isApk ? com.android.launcher3.R.drawable.ic_search_apk
                             : com.android.launcher3.R.drawable.ic_search_file;
                 }
@@ -161,6 +164,9 @@ public class MediaProvider implements SearchProvider {
     }
 
     public static boolean hasPermission(Context context) {
+        if (Environment.isExternalStorageManager()) {
+            return true;
+        }
         for (String permission : PERMISSIONS) {
             if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
                 return true;

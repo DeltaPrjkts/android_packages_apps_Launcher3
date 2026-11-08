@@ -392,18 +392,10 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
             return;
         }
         mUniversalSearchActive = active;
-        if (mSearchContainer instanceof com.android.launcher3.allapps.search.AppsSearchContainerLayout) {
-            ((com.android.launcher3.allapps.search.AppsSearchContainerLayout) mSearchContainer).setUniversalSearch(active);
-        }
         rebindAdapters(true);
         if (active) {
             // Hide the app grid before the container is shown, without waiting for results.
             animateToSearchState(true, 0);
-            post(() -> {
-                if (getSearchUiManager() != null) {
-                    getSearchUiManager().focusSearchField();
-                }
-            });
         }
     }
 
@@ -417,11 +409,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     /** Invoke when the current search session is finished. */
     public void onClearSearchResult() {
         getMainAdapterProvider().clearHighlightedItem();
+        mUniversalSearchActive = false;
         animateToSearchState(false);
-        if (mUniversalSearchActive) {
-            mUniversalSearchActive = false;
-        }
-        rebindAdapters();
+        rebindAdapters(true);
     }
 
     /**

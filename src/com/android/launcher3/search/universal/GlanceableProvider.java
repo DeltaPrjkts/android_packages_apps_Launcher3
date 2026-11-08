@@ -59,10 +59,10 @@ public final class GlanceableProvider {
                 + CalendarContract.Instances.STATUS + "!=" + CalendarContract.Events.STATUS_CANCELED;
         try (Cursor cursor = context.getContentResolver().query(uri.build(), projection,
                 selection, null, CalendarContract.Instances.BEGIN + " ASC")) {
-            if (cursor != null && cursor.moveToNext()) {
+            while (cursor != null && cursor.moveToNext()) {
                 long end = cursor.getLong(3);
                 if (end <= now) {
-                    return null;
+                    continue;
                 }
                 long id = cursor.getLong(0);
                 String title = cursor.getString(1);
@@ -82,6 +82,8 @@ public final class GlanceableProvider {
 
                 Intent intent = new Intent(Intent.ACTION_VIEW,
                         ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id))
+                        .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+                        .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
                 UniversalSearchResult result = new UniversalSearchResult(
@@ -145,7 +147,7 @@ public final class GlanceableProvider {
                 UniversalSearchResult result = new UniversalSearchResult(
                         UniversalSearchResult.SOURCE_SETTING, "glanceable_battery",
                         title, subtitle, intent, Process.myUserHandle(), 0);
-                result.iconRes = R.drawable.ic_smartspace_bluetooth;
+                result.iconRes = R.drawable.ic_search_battery;
                 return result;
             }
         } catch (RuntimeException e) {

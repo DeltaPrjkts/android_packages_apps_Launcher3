@@ -142,6 +142,7 @@ public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, Strin
         private static final int REQUEST_READ_MEDIA = 42;
         private static final int REQUEST_READ_MEDIA_PHOTOS = 43;
         private static final int REQUEST_READ_SCREENSHOTS = 44;
+        private static final int REQUEST_READ_DOWNLOADS = 45;
 
         private boolean mRestartOnResume = false;
 
@@ -212,6 +213,9 @@ public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, Strin
             wirePermissionToggle(screen, LauncherPrefs.SEARCH_RECENT_SCREENSHOTS.getSharedPrefKey(),
                     REQUEST_READ_SCREENSHOTS, MediaProvider.IMAGE_PERMISSIONS,
                     () -> MediaProvider.hasImagePermission(requireContext()));
+            wirePermissionToggle(screen, LauncherPrefs.SEARCH_RECENT_DOWNLOADS.getSharedPrefKey(),
+                    REQUEST_READ_DOWNLOADS, MediaProvider.PERMISSIONS,
+                    () -> MediaProvider.hasPermission(requireContext()));
             Preference clear = screen.findPreference("pref_search_clear_history");
             if (clear != null) {
                 clear.setOnPreferenceClickListener(preference -> {
@@ -263,6 +267,9 @@ public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, Strin
             } else if (requestCode == REQUEST_READ_SCREENSHOTS) {
                 key = LauncherPrefs.SEARCH_RECENT_SCREENSHOTS.getSharedPrefKey();
                 granted = MediaProvider.hasImagePermission(requireContext());
+            } else if (requestCode == REQUEST_READ_DOWNLOADS) {
+                key = LauncherPrefs.SEARCH_RECENT_DOWNLOADS.getSharedPrefKey();
+                granted = MediaProvider.hasPermission(requireContext());
             } else {
                 return;
             }
