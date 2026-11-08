@@ -43,7 +43,6 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.AbstractFloatingView;
 import com.android.launcher3.BubbleTextView;
 import com.android.launcher3.DropTarget.DragObject;
@@ -97,7 +96,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     private float mScrimProgress = 0f;
     private int mLastBlurRadius = 0;
     private boolean mIsClosing = false;
-    private boolean mIsOpenAndSettled = false;
 
     private static class IconTransition {
         View view;
@@ -310,7 +308,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         mActivityContext.getDragLayer().addView(this, params);
 
         mScrimProgress = 0f;
-        mIsOpenAndSettled = false;
         mPanel.setPanelBackgroundAlpha(0f);
         mPanel.setAlpha(0f);
 
@@ -600,11 +597,10 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     }
 
     private void finishOpen() {
+        hideSourceView();
         applyAnimationProgress(1f);
         resetIconTransitions();
-        mIsOpenAndSettled = true;
         mRecycler.setClipChildren(true);
-        mPanel.postInvalidate();
         mPanel.requestFocus();
         announceAccessibilityChanges();
     }
@@ -686,8 +682,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             }
             return;
         }
-        int minStep = Math.max(2, dp(2));
-        if (Math.abs(rounded - mLastBlurRadius) >= minStep || progress == 1f) {
+        if (rounded != mLastBlurRadius) {
             mLastBlurRadius = rounded;
             appsView.setRenderEffect(RenderEffect.createBlurEffect(
                     rounded, rounded, Shader.TileMode.CLAMP));
@@ -809,10 +804,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             return;
         }
         mIsClosing = true;
-        mIsOpenAndSettled = false;
-        if (mPanel != null) {
-            mPanel.postInvalidate();
-        }
 
         float currentProgress = mScrimProgress;
         cancelAnimation();
@@ -832,7 +823,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
 
     private void animateClose(float fromProgress) {
         cancelAnimation();
-        mIsOpenAndSettled = false;
 
         if (fromProgress >= 1f || mIconTransitions.isEmpty()) {
             resetIconTransitions();
@@ -886,7 +876,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     private void remove() {
         mIsOpen = false;
         mIsClosing = false;
-        mIsOpenAndSettled = false;
         if (getParent() instanceof ViewGroup parent) {
             parent.removeView(this);
         }
@@ -927,7 +916,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     protected void onDetachedFromWindow() {
         cancelAnimation();
         mIsOpen = false;
-        mIsOpenAndSettled = false;
         cleanupBlur();
         AllAppsStore store = mActivityContext.getActivityComponent().getAppsStore();
         store.unregisterIconContainer(mRecycler);
@@ -978,9 +966,6 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
     }
 
     private final class PanelView extends LinearLayout {
-        private final AxViewBackdropBlur mBackdropBlur = new AxViewBackdropBlur(this, false);
-        private boolean mCrossWindowBlurEnabled;
-        private int mBlurDepth = 45;
         private final Consumer<Boolean> mCrossWindowBlurListener = this::onCrossWindowBlurEnabledChanged;
         private float mBgAlpha = 0f;
 
@@ -988,16 +973,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
             mBgAlpha = Utilities.boundToRange(alpha, 0f, 1f);
             Drawable bg = getBackground();
             if (bg != null) {
-                int intAlpha = Math.round(mBgAlpha * 255);
-                bg.mutate().setAlpha(intAlpha);
-                if (bg instanceof RippleDrawable rd) {
-                    for (int i = 0; i < rd.getNumberOfLayers(); i++) {
-                        Drawable layer = rd.getDrawable(i);
-                        if (layer != null) {
-                            layer.mutate().setAlpha(intAlpha);
-                        }
-                    }
-                }
+                bg.setAlpha(Math.round(mBgAlpha * 255));
             }
             setElevation(dp(16 * mBgAlpha));
             setClipToOutline(mBgAlpha >= 0.99f);
@@ -1026,68 +1002,23 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         @Override
         protected void onAttachedToWindow() {
             super.onAttachedToWindow();
-            mBackdropBlur.onAttachedToWindow();
-            mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
             CrossWindowBlurListeners.getInstance().addListener(
                     getContext().getMainExecutor(), mCrossWindowBlurListener);
-            updateBlurPreferences();
         }
 
         @Override
         protected void onDetachedFromWindow() {
-            mBackdropBlur.onDetachedFromWindow();
             CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
             super.onDetachedFromWindow();
         }
 
-        @Override
-        public void onVisibilityAggregated(boolean isVisible) {
-            super.onVisibilityAggregated(isVisible);
-            mBackdropBlur.onVisibilityAggregated(isVisible);
-        }
-
-        @Override
-        protected boolean verifyDrawable(Drawable who) {
-            return super.verifyDrawable(who)
-                    || (mBackdropBlur != null && mBackdropBlur.verifyDrawable(who));
-        }
-
         private void onCrossWindowBlurEnabledChanged(boolean enabled) {
-            mCrossWindowBlurEnabled = enabled;
+            if (!mIsOpen || !isAttachedToWindow()) {
+                return;
+            }
             setBackground(CaddyStyle.background(getContext(), true));
             setPanelBackgroundAlpha(mBgAlpha);
             updateAppsViewBlur(mScrimProgress);
-            updateBlurState();
-            postInvalidate();
-        }
-
-        private void updateBlurPreferences() {
-            mBlurDepth = Math.max(0, LauncherPrefs.BLUR_DEPTH.get(getContext()));
-            mBackdropBlur.setBlurRadiusPx(mBlurDepth);
-            updateBlurState();
-        }
-
-        private boolean canDrawBlur() {
-            return mIsOpenAndSettled && !mIsClosing && mCurrentAnimator == null && mCrossWindowBlurEnabled
-                    && mBlurDepth > 0 && isHardwareAccelerated() && isAttachedToWindow()
-                    && getWidth() > 0 && getHeight() > 0 && getWindowVisibility() == VISIBLE;
-        }
-
-        private void updateBlurState() {
-            mBackdropBlur.setEnabled(canDrawBlur());
-            mBackdropBlur.setSurfaceAlpha(Math.round(255f
-                    * Utilities.boundToRange(getAlpha(), 0f, 1f)));
-        }
-
-        @Override
-        public void draw(Canvas canvas) {
-            if (canvas.isHardwareAccelerated()) {
-                updateBlurState();
-                if (mBackdropBlur.isEnabled()) {
-                    mBackdropBlur.draw(canvas, 0, 0, getWidth(), getHeight(), dp(32));
-                }
-            }
-            super.draw(canvas);
         }
     }
 

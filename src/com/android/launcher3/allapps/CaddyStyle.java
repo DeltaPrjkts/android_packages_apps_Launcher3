@@ -2,6 +2,7 @@ package com.android.launcher3.allapps;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.view.CrossWindowBlurListeners;
@@ -26,7 +27,7 @@ final class CaddyStyle {
                 : Themes.getAttrColor(context, android.R.attr.textColorPrimary);
     }
 
-    static RippleDrawable background(Context context, boolean sheet) {
+    static Drawable background(Context context, boolean sheet) {
         int base = Themes.getAttrColor(context, R.attr.allAppsScrimColor);
         if (LauncherPrefs.APP_DRAWER_CUSTOM_COLOR_ENABLED.get(context)) {
             base = Utilities.isDarkTheme(context)
@@ -35,7 +36,7 @@ final class CaddyStyle {
         }
         float opacity = Math.max(0, Math.min(100,
                 LauncherPrefs.APP_DRAWER_OPACITY.get(context))) / 100f;
-        int surface = ColorUtils.blendARGB(base, textColor(context), .12f);
+        int surface = ColorUtils.blendARGB(base, textColor(context), sheet ? .04f : .12f);
         boolean blurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled()
                 && LauncherPrefs.BLUR_DEPTH.get(context) > 0;
         int alpha;
@@ -49,9 +50,12 @@ final class CaddyStyle {
         shape.setCornerRadius(dp(context, sheet ? 32 : 22));
         shape.setStroke(dp(context, 1), ColorUtils.setAlphaComponent(
                 textColor(context), sheet ? 36 : 20));
+        if (sheet) {
+            return shape;
+        }
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(android.graphics.Color.WHITE);
-        mask.setCornerRadius(dp(context, sheet ? 32 : 22));
+        mask.setCornerRadius(dp(context, 22));
         return new RippleDrawable(ColorStateList.valueOf(
                 ColorUtils.setAlphaComponent(textColor(context), 24)), shape, mask);
     }

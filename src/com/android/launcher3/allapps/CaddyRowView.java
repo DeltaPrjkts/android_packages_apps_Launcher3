@@ -127,7 +127,7 @@ public class CaddyRowView extends LinearLayout {
             };
             preview.setColumnCount(2);
             preview.setRowCount(2);
-            preview.setPadding(dp(5), dp(5), dp(5), dp(5));
+            preview.setPadding(dp(4), dp(4), dp(4), dp(4));
             preview.setOnClickListener(open);
             preview.setOnFocusChangeListener(mFocusListener);
             preview.setContentDescription(title.getContentDescription());
