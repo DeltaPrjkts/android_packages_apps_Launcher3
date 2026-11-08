@@ -2,4 +2,6 @@
 <resources>
     <string name="cos_app_animations_title">ColorOS app animations</string>
     <string name="cos_app_animations_summary">Spring app opening and closing, with parallel launches while returning home</string>
+    <string name="cos_app_animations_warning">ColorOS app animations require proper device-side ADPF support to work correctly. They are not suitable for low-end devices.</string>
+    <string name="cos_app_animations_enable">Enable</string>
 </resources>

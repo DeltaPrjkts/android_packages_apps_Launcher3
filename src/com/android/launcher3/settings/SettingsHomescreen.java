@@ -178,6 +178,18 @@ public class SettingsHomescreen extends ComposeSettingsActivity
             mShowGoogleBarPref = screen.findPreference(LauncherPrefs.DOCK_SEARCH.getSharedPrefKey());
             mAutoAddIconsPref = screen.findPreference(SessionCommitReceiver.ADD_ICON_PREFERENCE_KEY);
 
+            SwitchPreferenceCompat cosAnimationsPref = screen.findPreference(
+                    LauncherPrefs.COS_APP_ANIMATIONS.getSharedPrefKey());
+            if (cosAnimationsPref != null) {
+                cosAnimationsPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    if (!Boolean.TRUE.equals(newValue)) {
+                        return true;
+                    }
+                    getPreferenceManager().showDialog(preference);
+                    return false;
+                });
+            }
+
             Preference clearHomeScreenPref = screen.findPreference(KEY_CLEAR_HOME_SCREEN);
             if (clearHomeScreenPref != null) {
                 clearHomeScreenPref.setOnPreferenceClickListener(pref -> {

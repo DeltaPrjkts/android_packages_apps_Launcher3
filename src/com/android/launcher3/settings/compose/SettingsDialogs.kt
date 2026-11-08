@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.preference.ListPreference
 import androidx.preference.Preference
+import androidx.preference.TwoStatePreference
 import com.android.launcher3.LauncherAppState
 import com.android.launcher3.LauncherPrefs
 import com.android.launcher3.R
@@ -87,8 +88,14 @@ internal fun SettingsDialog(pref: Preference, onDismiss: () -> Unit) {
             }
         else -> {
             val context = LocalContext.current
+            val cosAnimationsPreference =
+                (pref as? TwoStatePreference)?.takeIf {
+                    it.key == LauncherPrefs.COS_APP_ANIMATIONS.sharedPrefKey
+                }
             val message =
                 when {
+                    cosAnimationsPreference != null ->
+                        stringResource(R.string.cos_app_animations_warning)
                     pref is NotificationDotsPreference ->
                         context.getString(
                             R.string.msg_missing_notification_access,
@@ -112,6 +119,8 @@ internal fun SettingsDialog(pref: Preference, onDismiss: () -> Unit) {
                         shapes = ButtonDefaults.shapes(),
                         onClick = {
                             when {
+                                cosAnimationsPreference != null ->
+                                    cosAnimationsPreference.isChecked = true
                                 pref is NotificationDotsPreference ->
                                     context.startActivity(
                                         Intent(
@@ -135,7 +144,13 @@ internal fun SettingsDialog(pref: Preference, onDismiss: () -> Unit) {
                             onDismiss()
                         },
                     ) {
-                        Text(stringResource(android.R.string.ok))
+                        Text(
+                            stringResource(
+                                if (cosAnimationsPreference != null)
+                                    R.string.cos_app_animations_enable
+                                else android.R.string.ok,
+                            )
+                        )
                     }
                 },
                 dismissButton = {
