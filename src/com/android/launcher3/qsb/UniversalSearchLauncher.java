@@ -18,6 +18,7 @@ package com.android.launcher3.qsb;
 
 import static com.android.launcher3.BaseActivity.EVENT_RESUMED;
 import static com.android.launcher3.LauncherState.ALL_APPS;
+import static com.android.launcher3.anim.AnimatorListeners.forSuccessCallback;
 
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -63,7 +64,11 @@ final class UniversalSearchLauncher {
         launcher.getOverlayManager().hideOverlay(true);
         launcher.getAppsView().setUniversalSearchActive(true);
         // Search shares the All Apps container, but should open directly from home.
-        launcher.getStateManager().goToState(ALL_APPS, true);
-        launcher.getAppsView().getSearchUiManager().focusSearchField();
+        launcher.getStateManager().goToState(ALL_APPS, true, forSuccessCallback(() -> {
+            if (launcher.isInState(ALL_APPS)
+                    && launcher.getAppsView().isUniversalSearchActive()) {
+                launcher.getAppsView().getSearchUiManager().focusSearchField();
+            }
+        }));
     }
 }

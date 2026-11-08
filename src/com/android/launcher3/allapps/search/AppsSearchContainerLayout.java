@@ -43,7 +43,6 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.OnTouchListener;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.view.ViewOutlineProvider;
 
@@ -84,6 +83,8 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     private ActivityAllAppsContainerView<?> mAppsView;
     private String mResultQuery;
     private boolean mPrivateSpaceQueryHandled;
+    private boolean mClearTouchActive;
+    private boolean mClearTouchCancelled;
 
     // The amount of pixels to shift down and overlap with the rest of the content.
     private final int mContentOverlap;
@@ -175,6 +176,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
     @Override
     protected void onDetachedFromWindow() {
+        mClearTouchActive = false;
         mBackdropBlur.onDetachedFromWindow();
         CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
         ThemeManager.INSTANCE.get(getContext()).removeChangeListener(mThemeChangeListener);
@@ -353,30 +355,46 @@ public class AppsSearchContainerLayout extends ExtendedEditText
             setTranslationX(shift);
         }
 
-        setOnTouchListener(new OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    float touchX = getLayoutDirection() == LAYOUT_DIRECTION_RTL
-                            ? getWidth() - event.getX() : event.getX();
-
-                    boolean hasText = !TextUtils.isEmpty(getText());
-                    if (hasText) {
-                        int touchTarget = Math.max(Utilities.dpToPx(48), getPaddingEnd() + Utilities.dpToPx(48));
-                        if (touchX >= (getWidth() - touchTarget)) {
-                            setText("");
-                            return true;
-                        }
-                    }
-                    if (mAppsView != null && !mAppsView.isUniversalSearchActive()) {
-                        mAppsView.setUniversalSearchActive(true);
-                    }
-                }
-                return false;
-            }
-        });
-
         offsetTopAndBottom(mContentOverlap);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mClearTouchActive = !TextUtils.isEmpty(getText()) && isOverClearButton(event);
+            mClearTouchCancelled = false;
+        }
+        if (mClearTouchActive) {
+            if ((action == MotionEvent.ACTION_MOVE && !isOverClearButton(event))
+                    || action == MotionEvent.ACTION_POINTER_DOWN) {
+                mClearTouchCancelled = true;
+            }
+            if (action == MotionEvent.ACTION_UP) {
+                mClearTouchActive = false;
+                if (!mClearTouchCancelled && isOverClearButton(event)) {
+                    focusSearchField();
+                    setText("");
+                }
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                mClearTouchActive = false;
+            }
+            return true;
+        }
+        boolean handled = super.onTouchEvent(event);
+        if (handled && action == MotionEvent.ACTION_UP && mAppsView != null
+                && !mAppsView.isUniversalSearchActive()) {
+            mAppsView.setUniversalSearchActive(true);
+        }
+        return handled;
+    }
+
+    private boolean isOverClearButton(MotionEvent event) {
+        float touchX = getLayoutDirection() == LAYOUT_DIRECTION_RTL
+                ? getWidth() - event.getX() : event.getX();
+        int touchTarget = getPaddingEnd() + Utilities.dpToPx(48);
+        return touchX >= getWidth() - touchTarget && touchX <= getWidth()
+                && event.getY() >= 0 && event.getY() <= getHeight();
     }
 
     @Override

@@ -1242,6 +1242,9 @@ public class Launcher extends StatefulActivity<LauncherState>
             getAppsView().getSearchUiManager().focusSearchField();
         }
         if (!ALL_APPS.equals(state)) {
+            if (getAppsView().isUniversalSearchActive()) {
+                getAppsView().getSearchUiManager().resetSearch();
+            }
             getAppsView().setUniversalSearchActive(false);
         }
         setTitle(state);
