@@ -414,6 +414,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         View pageIndicatorContainer = (View) mPageIndicator.getParent();
         FrameLayout.LayoutParams lp =
                 (FrameLayout.LayoutParams) pageIndicatorContainer.getLayoutParams();
+        lp.height = getResources().getDimensionPixelSize(R.dimen.workspace_page_indicator_height);
+        pageIndicatorContainer.setTranslationX(0f);
 
         // Set insets for page indicator
         Rect padding = grid.mWorkspaceProfile.getWorkspacePadding();

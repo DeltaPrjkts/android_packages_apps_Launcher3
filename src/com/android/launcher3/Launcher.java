@@ -1863,7 +1863,9 @@ public class Launcher extends StatefulActivity<LauncherState>
      */
     public void updatePaginationArrowVisibilities() {
         if (shouldEnableMouseInteractionChanges(mWorkspace.getContext())) {
-            int visibilityStatus = mWorkspace.getPageCount() > 1 ? View.VISIBLE : View.GONE;
+            int visibilityStatus = mWorkspace.getPageCount() > 1
+                    && (mHotseat == null || !mHotseat.isSearchPillPageIndicatorEnabled())
+                    ? View.VISIBLE : View.GONE;
             mLeftArrow.setVisibility(visibilityStatus);
             mRightArrow.setVisibility(visibilityStatus);
         }
@@ -1887,7 +1889,7 @@ public class Launcher extends StatefulActivity<LauncherState>
      * Search pill spot they still hide once pages settle, so the Search pill comes back.
      */
     private boolean keepsPageIndicatorShown() {
-        if (mHotseat != null && mHotseat.isCompactSearchBarEnabled()) {
+        if (mHotseat != null && mHotseat.isSearchPillPageIndicatorEnabled()) {
             return false;
         }
         return !LauncherPrefs.AUTO_HIDE_DOTS.get(this)

@@ -64,6 +64,7 @@ public class CompactSearchBar extends FrameLayout
     private ObjectAnimator mSquishAnimator;
     private boolean mIsLaunching;
     private final Runnable mLaunchRunnable = this::launchActionInternal;
+    private final Runnable mResetLaunchingRunnable = () -> mIsLaunching = false;
     private final ThemeManager.ThemeChangeListener mThemeChangeListener = () -> {
         setIcon();
         setUpBackground();
@@ -105,16 +106,7 @@ public class CompactSearchBar extends FrameLayout
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        removeCallbacks(mLaunchRunnable);
-        if (mSquishAnimator != null) {
-            mSquishAnimator.cancel();
-            mSquishAnimator = null;
-        }
-        mIsLaunching = false;
-        if (mInner != null) {
-            mInner.setScaleX(1f);
-            mInner.setScaleY(1f);
-        }
+        cancelSearchClick();
         ThemeManager.INSTANCE.get(mContext).addChangeListener(mThemeChangeListener);
         LauncherPrefs.getPrefs(mContext).registerOnSharedPreferenceChangeListener(this);
         mBackdropBlur.onAttachedToWindow();
@@ -130,15 +122,8 @@ public class CompactSearchBar extends FrameLayout
 
     @Override
     protected void onDetachedFromWindow() {
-        removeCallbacks(mLaunchRunnable);
-        if (mSquishAnimator != null) {
-            mSquishAnimator.cancel();
-            mSquishAnimator = null;
-        }
-        mIsLaunching = false;
+        cancelSearchClick();
         if (mInner != null) {
-            mInner.setScaleX(1f);
-            mInner.setScaleY(1f);
             mInner.setOnClickListener(null);
             mInner.setBackground(null);
         }
@@ -199,16 +184,7 @@ public class CompactSearchBar extends FrameLayout
             postInvalidate();
         } else {
             hideBlur();
-            removeCallbacks(mLaunchRunnable);
-            if (mSquishAnimator != null) {
-                mSquishAnimator.cancel();
-                mSquishAnimator = null;
-            }
-            mIsLaunching = false;
-            if (mInner != null) {
-                mInner.setScaleX(1f);
-                mInner.setScaleY(1f);
-            }
+            cancelSearchClick();
         }
     }
 
@@ -216,6 +192,9 @@ public class CompactSearchBar extends FrameLayout
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
         mBackdropBlur.onVisibilityAggregated(isVisible);
+        if (!isVisible) {
+            cancelSearchClick();
+        }
     }
 
     @Override
@@ -406,7 +385,7 @@ public class CompactSearchBar extends FrameLayout
     }
 
     private void handleSearchClick() {
-        if (mIsLaunching) return;
+        if (mIsLaunching || !isAttachedToWindow() || !isShown()) return;
         mIsLaunching = true;
 
         if (!ValueAnimator.areAnimatorsEnabled()) {
@@ -415,15 +394,34 @@ public class CompactSearchBar extends FrameLayout
         }
 
         playSquishAnimation();
-        postDelayed(mLaunchRunnable, ACTION_LAUNCH_DELAY_MS);
+        postDelayed(mLaunchRunnable,
+                (long) (ACTION_LAUNCH_DELAY_MS * ValueAnimator.getDurationScale()));
     }
 
     private void launchActionInternal() {
+        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE) {
+            cancelSearchClick();
+            return;
+        }
         try {
             launchAction();
         } finally {
-            postDelayed(() -> mIsLaunching = false, 300);
+            if (isAttachedToWindow() && isShown()) {
+                postDelayed(mResetLaunchingRunnable, 300);
+            } else {
+                mIsLaunching = false;
+            }
         }
+    }
+
+    private void cancelSearchClick() {
+        removeCallbacks(mLaunchRunnable);
+        removeCallbacks(mResetLaunchingRunnable);
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+        }
+        resetSquishState();
+        mIsLaunching = false;
     }
 
     private void playSquishAnimation() {
@@ -462,6 +460,7 @@ public class CompactSearchBar extends FrameLayout
 
         mSquishAnimator = ObjectAnimator.ofPropertyValuesHolder(mInner, pvhScaleX, pvhScaleY);
         mSquishAnimator.setDuration(SQUISH_DURATION_MS);
+        mSquishAnimator.setInterpolator(Interpolators.LINEAR);
         mSquishAnimator.addUpdateListener(anim -> invalidate());
         mSquishAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
@@ -605,7 +604,7 @@ public class CompactSearchBar extends FrameLayout
      * When dotsReveal is 1, the search pill content is fully hidden.
      */
     public void setDotsReveal(float dotsReveal) {
-        float shown = 1f - dotsReveal;
+        float shown = 1f - Utilities.boundToRange(dotsReveal, 0f, 1f);
         float contentScale = 0.85f + 0.15f * shown;
 
         if (mActionIcon != null) {
@@ -620,6 +619,10 @@ public class CompactSearchBar extends FrameLayout
         }
         if (mInner != null) {
             mInner.setClickable(shown > 0.5f);
+            mInner.setFocusable(shown > 0.5f);
+            mInner.setImportantForAccessibility(shown > 0.5f
+                    ? IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                    : IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         }
     }
 }

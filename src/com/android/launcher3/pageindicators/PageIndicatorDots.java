@@ -170,8 +170,7 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
         mPaginationPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         mPaginationPaint.setStyle(Style.FILL);
         mPaginationPaint.setColor(Themes.getAttrColor(context, R.attr.pageIndicatorDotColor));
-        mPaginationPaint.setAlpha(INVISIBLE_ALPHA);
-        mToAlpha = INVISIBLE_ALPHA;
+        mToAlpha = mPaginationPaint.getAlpha();
         mDotRadius = getResources().getDimension(R.dimen.page_indicator_dot_size) / 2;
         mGapWidth = getResources().getDimension(R.dimen.page_indicator_gap_width);
         mCircleGap = (enableLauncherVisualRefresh())
@@ -183,8 +182,10 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
 
     @Override
     public void setScroll(int currentScroll, int totalScroll) {
+        mTotalScroll = totalScroll;
         if (currentScroll == 0 && totalScroll == 0) {
             CURRENT_POSITION.set(this, (float) mActivePage);
+            notifyRevealChanged();
             return;
         }
 
@@ -204,8 +205,6 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
         if (mIsRtl) {
             currentScroll = totalScroll - currentScroll;
         }
-
-        mTotalScroll = totalScroll;
 
         if (enableLauncherVisualRefresh()) {
             float scrollPerPage = (float) totalScroll / (mNumPages - 1);
@@ -266,7 +265,14 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
     @Override
     public void setShouldAutoHide(boolean shouldAutoHide) {
         mShouldAutoHide = shouldAutoHide;
-        if (shouldAutoHide && mPaginationPaint.getAlpha() > INVISIBLE_ALPHA) {
+        if (shouldAutoHide && mTotalScroll == 0) {
+            mDelayedPaginationFadeHandler.removeCallbacksAndMessages(null);
+            if (mAlphaAnimator != null) {
+                mAlphaAnimator.cancel();
+            }
+            mToAlpha = INVISIBLE_ALPHA;
+            PAGINATION_ALPHA.set(this, INVISIBLE_ALPHA);
+        } else if (shouldAutoHide && mPaginationPaint.getAlpha() > INVISIBLE_ALPHA) {
             hideAfterDelay();
         } else if (!shouldAutoHide) {
             mDelayedPaginationFadeHandler.removeCallbacksAndMessages(null);
@@ -515,7 +521,6 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
         }
 
         if (mShouldAutoHide && mTotalScroll == 0) {
-            mPaginationPaint.setAlpha(INVISIBLE_ALPHA);
             return;
         }
 
