@@ -21,6 +21,7 @@ import static android.view.View.MeasureSpec.makeMeasureSpec;
 
 import static com.android.launcher3.icons.IconNormalizer.ICON_VISIBLE_AREA_FACTOR;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -30,6 +31,9 @@ import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.PaintDrawable;
+import android.net.Uri;
+import android.speech.RecognizerIntent;
 import android.text.Editable;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
@@ -76,6 +80,12 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         implements SearchUiManager, SearchCallback<AdapterItem>,
         AllAppsStore.OnUpdateListener, Insettable {
 
+    private static final int ACTION_NONE = 0;
+    private static final int ACTION_CLEAR = 1;
+    private static final int ACTION_GOOGLE = 2;
+    private static final int ACTION_VOICE = 3;
+    private static final int ACTION_LENS = 4;
+
     private final ActivityContext mLauncher;
     private final AllAppsSearchBarController mSearchBarController;
     private final SpannableStringBuilder mSearchQueryBuilder;
@@ -83,8 +93,11 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     private ActivityAllAppsContainerView<?> mAppsView;
     private String mResultQuery;
     private boolean mPrivateSpaceQueryHandled;
-    private boolean mClearTouchActive;
-    private boolean mClearTouchCancelled;
+    private int mTouchAction = ACTION_NONE;
+    private boolean mTouchActionCancelled;
+    private boolean mUsePillSearchBar;
+    private boolean mShowGoogleSearchActions;
+    private boolean mHasGoogleApp;
 
     // The amount of pixels to shift down and overlap with the rest of the content.
     private final int mContentOverlap;
@@ -108,7 +121,12 @@ public class AppsSearchContainerLayout extends ExtendedEditText
             (preferences, key) -> {
                 if (LauncherPrefs.BLUR_DEPTH.getSharedPrefKey().equals(key)
                         || LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key)
-                        || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)) {
+                        || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.APP_DRAWER_PILL_SEARCH_BAR.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.SEARCH_RADIUS_SIZE.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.DOCK_SEARCH.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey().equals(key)
+                        || LauncherPrefs.COMPACT_SEARCH_BAR.getSharedPrefKey().equals(key)) {
                     updateSearchBarStyle();
                 }
             };
@@ -122,7 +140,9 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
         @Override
         public void afterTextChanged(Editable s) {
-            updateUniversalSearchDrawablesAndGravity();
+            if (mUsePillSearchBar) {
+                updateUniversalSearchDrawablesAndGravity();
+            }
         }
     };
 
@@ -150,7 +170,9 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), view.getHeight() / 2f);
+                float radius = mUsePillSearchBar
+                        ? view.getHeight() / 2f : getLegacyCornerRadius();
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
             }
         });
         setClipToOutline(true);
@@ -176,7 +198,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
     @Override
     protected void onDetachedFromWindow() {
-        mClearTouchActive = false;
+        mTouchAction = ACTION_NONE;
         mBackdropBlur.onDetachedFromWindow();
         CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
         ThemeManager.INSTANCE.get(getContext()).removeChangeListener(mThemeChangeListener);
@@ -235,7 +257,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     }
 
     private void updateBlurState() {
-        mBackdropBlur.setEnabled(canDrawBlur());
+        mBackdropBlur.setEnabled(mUsePillSearchBar && canDrawBlur());
         mBackdropBlur.setSurfaceAlpha(Math.round(255f
                 * Utilities.boundToRange(getAlpha(), 0f, 1f)));
     }
@@ -295,6 +317,22 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     }
 
     private void updateSearchBarStyle() {
+        boolean usePill = LauncherPrefs.APP_DRAWER_PILL_SEARCH_BAR.get(getContext());
+        if (mUsePillSearchBar != usePill) {
+            mTouchActionCancelled = true;
+        }
+        mUsePillSearchBar = usePill;
+        if (usePill) {
+            updatePillSearchBarStyle();
+        } else {
+            updateLegacySearchBarStyle();
+        }
+        updateBlurPreferences();
+        invalidateOutline();
+        invalidate();
+    }
+
+    private void updatePillSearchBarStyle() {
         updateUniversalSearchDrawablesAndGravity();
         setHint(R.string.label_search);
         setHintTextColor(Themes.getAttrColor(getContext(), android.R.attr.textColorSecondary));
@@ -303,7 +341,43 @@ public class AppsSearchContainerLayout extends ExtendedEditText
                 getResources().getDimension(R.dimen.compact_search_bar_text_size));
         setPaddingRelative(Utilities.dpToPx(12), getPaddingTop(), Utilities.dpToPx(12), getPaddingBottom());
         setUpUniversalSearchBackground();
-        updateBlurPreferences();
+    }
+
+    private void updateLegacySearchBarStyle() {
+        Context context = getContext();
+        mHasGoogleApp = Utilities.isGSAEnabled(context);
+        mShowGoogleSearchActions = Utilities.showQSB(context)
+                || (LauncherPrefs.COMPACT_SEARCH_BAR.get(context)
+                        && LauncherPrefs.DOCK_SEARCH.get(context) && mHasGoogleApp);
+        boolean themed = ThemeManager.INSTANCE.get(context).isMonoThemeEnabled();
+        Drawable start = context.getDrawable(mShowGoogleSearchActions
+                ? (themed ? R.drawable.ic_allapps_g_themed : R.drawable.ic_allapps_g_color)
+                : R.drawable.ic_allapps_search_color);
+        Drawable end = mShowGoogleSearchActions
+                ? context.getDrawable(themed ? R.drawable.ic_allapps_actions_themed
+                        : R.drawable.ic_allapps_actions_color) : null;
+        setCompoundDrawablesRelativeWithIntrinsicBounds(start, null, end, null);
+        setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        setCursorVisible(true);
+        setHint(null);
+        setHintTextColor(context.getColorStateList(R.drawable.all_apps_search_hint));
+        setTextColor(Themes.getAttrColor(context, android.R.attr.textColorSecondary));
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        setPaddingRelative(Utilities.dpToPx(3), getPaddingTop(), 0, getPaddingBottom());
+        int color = Themes.getAttrColor(context,
+                mShowGoogleSearchActions && LauncherPrefs.DOCK_THEME.get(context)
+                        ? R.attr.qsbFillColorThemed : R.attr.qsbFillColor);
+        PaintDrawable background = new PaintDrawable(color);
+        float radius = getLegacyCornerRadius();
+        background.setCornerRadius(radius);
+        setBackground(background);
+        setClipToOutline(radius > 0);
+    }
+
+    private float getLegacyCornerRadius() {
+        float height = getResources().getDimension(R.dimen.qsb_widget_height)
+                - 2 * getResources().getDimension(R.dimen.qsb_widget_vertical_padding);
+        return height / 2f * LauncherPrefs.SEARCH_RADIUS_SIZE.get(getContext()) / 100f;
     }
 
     @Override
@@ -362,22 +436,22 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
-            mClearTouchActive = !TextUtils.isEmpty(getText()) && isOverClearButton(event);
-            mClearTouchCancelled = false;
+            mTouchAction = getTouchAction(event);
+            mTouchActionCancelled = false;
         }
-        if (mClearTouchActive) {
-            if ((action == MotionEvent.ACTION_MOVE && !isOverClearButton(event))
+        if (mTouchAction != ACTION_NONE) {
+            if ((action == MotionEvent.ACTION_MOVE && getTouchAction(event) != mTouchAction)
                     || action == MotionEvent.ACTION_POINTER_DOWN) {
-                mClearTouchCancelled = true;
+                mTouchActionCancelled = true;
             }
             if (action == MotionEvent.ACTION_UP) {
-                mClearTouchActive = false;
-                if (!mClearTouchCancelled && isOverClearButton(event)) {
-                    focusSearchField();
-                    setText("");
+                int touchAction = mTouchAction;
+                mTouchAction = ACTION_NONE;
+                if (!mTouchActionCancelled && getTouchAction(event) == touchAction) {
+                    performSearchAction(touchAction);
                 }
             } else if (action == MotionEvent.ACTION_CANCEL) {
-                mClearTouchActive = false;
+                mTouchAction = ACTION_NONE;
             }
             return true;
         }
@@ -389,25 +463,80 @@ public class AppsSearchContainerLayout extends ExtendedEditText
         return handled;
     }
 
-    private boolean isOverClearButton(MotionEvent event) {
+    private int getTouchAction(MotionEvent event) {
         float touchX = getLayoutDirection() == LAYOUT_DIRECTION_RTL
                 ? getWidth() - event.getX() : event.getX();
-        int touchTarget = getPaddingEnd() + Utilities.dpToPx(48);
-        return touchX >= getWidth() - touchTarget && touchX <= getWidth()
-                && event.getY() >= 0 && event.getY() <= getHeight();
+        if (touchX < 0 || touchX > getWidth()
+                || event.getY() < 0 || event.getY() > getHeight()) {
+            return ACTION_NONE;
+        }
+        if (mUsePillSearchBar) {
+            int touchTarget = getPaddingEnd() + Utilities.dpToPx(48);
+            return !TextUtils.isEmpty(getText()) && touchX >= getWidth() - touchTarget
+                    ? ACTION_CLEAR : ACTION_NONE;
+        }
+        if (mShowGoogleSearchActions) {
+            int slotWidth = getResources().getDimensionPixelSize(R.dimen.qsb_icon_tap_size);
+            if (mHasGoogleApp && touchX <= getPaddingStart() + slotWidth) {
+                return ACTION_GOOGLE;
+            }
+            int actionsStart = getWidth() - getPaddingEnd() - 2 * slotWidth;
+            if (touchX >= actionsStart) {
+                return touchX < actionsStart + slotWidth ? ACTION_VOICE
+                        : mHasGoogleApp ? ACTION_LENS : ACTION_NONE;
+            }
+        }
+        return ACTION_NONE;
+    }
+
+    private void performSearchAction(int action) {
+        Intent intent;
+        switch (action) {
+            case ACTION_CLEAR:
+                focusSearchField();
+                setText("");
+                return;
+            case ACTION_GOOGLE:
+                intent = getContext().getPackageManager()
+                        .getLaunchIntentForPackage(Utilities.GSA_PACKAGE);
+                if (intent == null) {
+                    return;
+                }
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                break;
+            case ACTION_VOICE:
+                intent = new Intent(RecognizerIntent.ACTION_WEB_SEARCH)
+                        .setPackage(Utilities.GSA_PACKAGE)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH);
+                if (intent.resolveActivity(getContext().getPackageManager()) == null) {
+                    intent = new Intent(Intent.ACTION_VOICE_COMMAND);
+                }
+                break;
+            case ACTION_LENS:
+                intent = new Intent(Intent.ACTION_VIEW)
+                        .setComponent(new ComponentName(Utilities.GSA_PACKAGE, Utilities.LENS_ACTIVITY))
+                        .setData(Uri.parse(Utilities.LENS_URI))
+                        .putExtra("LensHomescreenShortcut", true);
+                break;
+            default:
+                return;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        mLauncher.startActivitySafely(this, intent, null);
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (h > 0) {
+        if (mUsePillSearchBar && h > 0) {
             mBackgroundTintDrawable.setCornerRadius(h / 2f);
         }
     }
 
     @Override
     public void draw(Canvas canvas) {
-        if (canvas.isHardwareAccelerated()) {
+        if (mUsePillSearchBar && canvas.isHardwareAccelerated()) {
             updateBlurState();
             if (mBackdropBlur.isEnabled()) {
                 mBackdropBlur.draw(canvas, 0, 0, getWidth(), getHeight(), getHeight() / 2f);
@@ -442,6 +571,7 @@ public class AppsSearchContainerLayout extends ExtendedEditText
 
     @Override
     public void onAppsUpdated() {
+        updateSearchBarStyle();
         mSearchBarController.refreshSearchResult();
     }
 

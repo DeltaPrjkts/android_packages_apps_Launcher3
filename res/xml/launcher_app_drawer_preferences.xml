@@ -110,6 +110,14 @@
         android:persistent="true"
         launcher:iconSpaceReserved="false" />
 
+    <SwitchPreferenceCompat
+        android:key="pref_app_drawer_pill_search_bar"
+        android:title="@string/drawer_pill_search_bar_title"
+        android:summary="@string/drawer_pill_search_bar_summary"
+        android:defaultValue="false"
+        android:persistent="true"
+        launcher:iconSpaceReserved="false" />
+
     <PreferenceScreen
         android:key="pref_universal_search"
         android:title="@string/universal_search_title"

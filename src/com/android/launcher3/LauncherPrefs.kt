@@ -298,6 +298,8 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
             backedUpItem("pref_dock_search_widget_pending_config", false)
         @JvmField val DOCK_THEME = backedUpItem("pref_dock_theme", false)
         @JvmField val DRAWER_OPEN_KEYBOARD = backedUpItem("pref_drawer_open_keyboard", false)
+        @JvmField
+        val APP_DRAWER_PILL_SEARCH_BAR = backedUpItem("pref_app_drawer_pill_search_bar", false)
         @JvmField val DRAWER_SCROLLBAR = backedUpItem("pref_drawer_scrollbar", true)
         @JvmField val DRAWER_LIST = backedUpItem("pref_drawer_list", true)
         @JvmField val CADDY_FAVORITES = backedUpItem("pref_caddy_favorites", "{}")

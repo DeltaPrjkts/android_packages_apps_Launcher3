@@ -166,6 +166,8 @@
 
     <!-- App drawer searchbar -->
     <string name="drawer_search_title">App search bar location</string>
+    <string name="drawer_pill_search_bar_title">Blurred search bar</string>
+    <string name="drawer_pill_search_bar_summary">Use a blurred pill with a search icon and clear button</string>
     <string name="drawer_search_location_hidden">Hidden</string>
     <string name="drawer_search_location_top">Top</string>
     <string name="drawer_search_location_bottom">Bottom</string>
