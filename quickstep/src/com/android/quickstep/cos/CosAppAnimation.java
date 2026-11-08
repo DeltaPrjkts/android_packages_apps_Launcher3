@@ -13,13 +13,13 @@ import com.android.launcher3.LauncherPrefs;
 
 /** Motion measured from ColorOS, kept independent of the default launcher animations. */
 public final class CosAppAnimation {
-    public static final long LAUNCH_DURATION = 320;
+    public static final long LAUNCH_DURATION = 500;
     public static final long ICON_FADE_DURATION = 43;
     public static final long REVEAL_DURATION = 500;
     public static final long WALLPAPER_OPEN_DURATION = 500;
     public static final long WALLPAPER_CLOSE_DURATION = 900;
     public static final float HOME_SCALE = 0.9f;
-    public static final Interpolator OPEN = spring(1900f, 1.85f, LAUNCH_DURATION);
+    public static final Interpolator OPEN = spring(420f, 1.04f, LAUNCH_DURATION);
     public static final Interpolator REVEAL = spring(324f, 1f, REVEAL_DURATION);
     public static final Interpolator WALLPAPER_OPEN = spring(196f, 1f, WALLPAPER_OPEN_DURATION);
     public static final Interpolator WALLPAPER_CLOSE = spring(49f, 1f, WALLPAPER_CLOSE_DURATION);
@@ -46,7 +46,7 @@ public final class CosAppAnimation {
     }
 
     public static float iconFade(float elapsedMs) {
-        float wt = 30f * Math.max(0f, elapsedMs - 17f) / 1000f;
+        float wt = 85f * Math.max(0f, elapsedMs - 55f) / 1000f;
         return 1f - (1f + wt) * (float) Math.exp(-wt);
     }
 }

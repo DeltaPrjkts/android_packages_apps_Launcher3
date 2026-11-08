@@ -318,7 +318,7 @@ public class RectFSpringAnim extends ReleaseCheck {
 
         if (mCos) {
             if ((endX - startX) * xVelocityPxPerS < 0) xVelocityPxPerS *= 0.25f;
-            if ((endY - startY) * yVelocityPxPerS < 0) yVelocityPxPerS *= 0.25f;
+            if ((endY - startY) * yVelocityPxPerS < 0) yVelocityPxPerS = 0f;
             mChoreographer = Choreographer.getInstance();
             mCosStartTime = 0;
             mCosFadeProgress = 0f;
@@ -350,6 +350,14 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setStartVelocity(yVelocityPxPerS)
                         .addEndListener(onYEndListener);
 
+        float scaleVelocity = velocityPxPerMs.y * minVisibleChange;
+        if (mCos) {
+            float span = Math.max(1f, mStartRect.width() - mTargetRect.width());
+            float flight = 2.8f * context.getResources().getDisplayMetrics().widthPixels / span;
+            scaleVelocity = Utilities.boundToRange(Math.max(flight,
+                    -velocityPxPerMs.y * 1000 / Math.max(1f, mStartRect.height())), 0f, 12f);
+        }
+
         mRectScaleAnim =
                 new SpringAnimation(this, RECT_SCALE_PROGRESS)
                         .setSpring(
@@ -358,9 +366,7 @@ public class RectFSpringAnim extends ReleaseCheck {
                                                 ? mRectStiffness * stiffnessScale : sCachedStiffnessZ)
                                         .setDampingRatio(mUseConfiguredSpring
                                                 ? mRectDamping : sCachedDampingZ))
-                        .setStartVelocity(mCos ? Utilities.boundToRange(
-                                -velocityPxPerMs.y * 1000 / Math.max(1f, mStartRect.height()), 0f, 8f)
-                                : velocityPxPerMs.y * minVisibleChange)
+                        .setStartVelocity(scaleVelocity)
                         .setMaxValue(mCos ? 1.25f : 1f)
                         .setMinimumVisibleChange(minVisibleChange)
                         .addEndListener((animation, canceled, value, velocity) -> {
