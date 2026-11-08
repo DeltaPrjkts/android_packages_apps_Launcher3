@@ -48,6 +48,9 @@ import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.ShortcutAndWidgetContainer.TranslationProvider;
 import com.android.launcher3.celllayout.CellLayoutLayoutParams;
 import com.android.launcher3.model.data.ItemInfo;
+import com.android.launcher3.pageindicators.PageIndicator;
+import com.android.launcher3.pageindicators.PageIndicatorDots;
+import com.android.launcher3.qsb.CompactSearchBar;
 import com.android.launcher3.qsb.DockSearchWidgetHelper;
 import com.android.launcher3.util.HorizontalInsettableView;
 import com.android.launcher3.util.LauncherBindableItemsContainer.ItemOperator;
@@ -116,6 +119,7 @@ public class Hotseat extends CellLayout implements Insettable {
     private final Rect mInsets = new Rect();
     private boolean mHasInsets;
     private int mBackgroundTopInset;
+    private int mSearchPillCentreFromBottom = -1;
     private boolean mShowHotseatBg;
     private boolean mHotseatBlur;
     private int mBlurDepth;
@@ -387,6 +391,7 @@ public class Hotseat extends CellLayout implements Insettable {
     public void setWorkspace(Workspace<?> w) {
         mWorkspace = w;
         setCellLayoutContainer(w);
+        bindPageIndicatorToSearchPill();
     }
 
     @Override
@@ -460,6 +465,7 @@ public class Hotseat extends CellLayout implements Insettable {
             updateBlurState();
             invalidate();
         }
+        updateSearchPillCentre();
     }
 
     @Override
@@ -651,7 +657,10 @@ public class Hotseat extends CellLayout implements Insettable {
     }
 
     public boolean isCompactSearchBarEnabled() {
-        return LauncherPrefs.COMPACT_SEARCH_BAR.get(getContext());
+        return (mQsb instanceof CompactSearchBar)
+                || (LauncherPrefs.COMPACT_SEARCH_BAR.get(getContext())
+                && Utilities.isGSAEnabled(getContext())
+                && LauncherPrefs.DOCK_SEARCH.get(getContext()));
     }
 
     /**
@@ -695,6 +704,158 @@ public class Hotseat extends CellLayout implements Insettable {
                 "ALPHA_CHANNEL_ASSISTANT_VISIBILITY",
                 "ALPHA_CHANNEL_STATE_VISIBILITY"
         );
+    }
+
+    private @Nullable View getActiveSearchPill() {
+        if (!isCompactSearchBarEnabled() || mQsb == null) {
+            return null;
+        }
+        if (mQsb instanceof CompactSearchBar) {
+            View inner = mQsb.findViewById(R.id.compact_search_bar_inner);
+            return inner != null ? inner : mQsb;
+        }
+        return mQsb;
+    }
+
+    /**
+     * Positions the workspace page dots over the compact search pill capsule.
+     * Returns true if applied, false if compact search bar is not active.
+     */
+    public boolean applySearchPillPageIndicatorLayout() {
+        if (!isCompactSearchBarEnabled() || mWorkspace == null) {
+            return false;
+        }
+        PageIndicator pageIndicator = mWorkspace.getPageIndicator();
+        if (!(pageIndicator instanceof PageIndicatorDots dots)) {
+            return false;
+        }
+        View pageIndicatorContainer = (View) dots.getParent();
+        if (pageIndicatorContainer == null
+                || !(pageIndicatorContainer.getLayoutParams() instanceof FrameLayout.LayoutParams lp)) {
+            return false;
+        }
+
+        View leftArrow = pageIndicatorContainer.findViewById(R.id.left_indicator_arrow);
+        if (leftArrow != null) {
+            leftArrow.setVisibility(View.GONE);
+        }
+        View rightArrow = pageIndicatorContainer.findViewById(R.id.right_indicator_arrow);
+        if (rightArrow != null) {
+            rightArrow.setVisibility(View.GONE);
+        }
+
+        View pill = getActiveSearchPill();
+        int pillHeight = pill != null && pill.getHeight() > 0 ? pill.getHeight()
+                : getResources().getDimensionPixelSize(R.dimen.compact_search_bar_height);
+        int height = Math.max(
+                getResources().getDimensionPixelSize(R.dimen.workspace_page_indicator_height),
+                pillHeight);
+
+        int centerFromBottom = mSearchPillCentreFromBottom;
+        if (centerFromBottom <= 0) {
+            if (pill != null && pill.isAttachedToWindow() && pill.getHeight() > 0
+                    && mActivity.getDragLayer() != null && mActivity.getDragLayer().getHeight() > 0) {
+                int[] pillLoc = new int[2];
+                int[] dragLayerLoc = new int[2];
+                pill.getLocationInWindow(pillLoc);
+                mActivity.getDragLayer().getLocationInWindow(dragLayerLoc);
+                int pillCenterY = (pillLoc[1] - dragLayerLoc[1]) + pill.getHeight() / 2;
+                centerFromBottom = mActivity.getDragLayer().getHeight() - pillCenterY;
+            } else {
+                DeviceProfile grid = mActivity.getDeviceProfile();
+                centerFromBottom = grid.hotseatBarSizePx;
+            }
+        }
+
+        int margin = centerFromBottom - height / 2;
+
+        if (lp.height != height || lp.bottomMargin != margin
+                || lp.gravity != (Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM)) {
+            lp.height = height;
+            lp.bottomMargin = margin;
+            lp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
+            pageIndicatorContainer.setLayoutParams(lp);
+        }
+        return true;
+    }
+
+    private void updateSearchPillCentre() {
+        if (!isCompactSearchBarEnabled()) {
+            if (mSearchPillCentreFromBottom != -1) {
+                mSearchPillCentreFromBottom = -1;
+                bindPageIndicatorToSearchPill();
+            }
+            return;
+        }
+        View pill = getActiveSearchPill();
+        int centre = -1;
+        if (pill != null && pill.isAttachedToWindow() && pill.getHeight() > 0
+                && mActivity.getDragLayer() != null && mActivity.getDragLayer().getHeight() > 0) {
+            int[] pillLoc = new int[2];
+            int[] dragLayerLoc = new int[2];
+            pill.getLocationInWindow(pillLoc);
+            mActivity.getDragLayer().getLocationInWindow(dragLayerLoc);
+            int pillCenterY = (pillLoc[1] - dragLayerLoc[1]) + pill.getHeight() / 2;
+            centre = mActivity.getDragLayer().getHeight() - pillCenterY;
+        }
+        if (centre <= 0) {
+            DeviceProfile grid = mActivity.getDeviceProfile();
+            centre = grid.hotseatBarSizePx;
+        }
+        if (centre != mSearchPillCentreFromBottom) {
+            mSearchPillCentreFromBottom = centre;
+            post(this::bindPageIndicatorToSearchPill);
+        }
+    }
+
+    public void bindPageIndicatorToSearchPill() {
+        if (mWorkspace == null) {
+            return;
+        }
+        PageIndicator pageIndicator = mWorkspace.getPageIndicator();
+        if (!(pageIndicator instanceof PageIndicatorDots dots)) {
+            return;
+        }
+
+        if (!isCompactSearchBarEnabled()) {
+            dots.setRevealListener(null);
+            if (dots.getParent() instanceof View container) {
+                container.setAlpha(1f);
+                container.setScaleX(1f);
+                container.setScaleY(1f);
+            }
+            dots.setScaleX(1f);
+            dots.setScaleY(1f);
+            setSearchPillReveal(0f);
+            mWorkspace.setPageIndicatorInset();
+            return;
+        }
+
+        applySearchPillPageIndicatorLayout();
+        dots.setShouldAutoHide(true);
+        dots.setRevealListener(this::onPageDotsRevealChanged);
+        onPageDotsRevealChanged();
+    }
+
+    private void onPageDotsRevealChanged() {
+        if (mWorkspace == null) return;
+        PageIndicator pageIndicator = mWorkspace.getPageIndicator();
+        if (pageIndicator instanceof PageIndicatorDots dots) {
+            float reveal = dots.getReveal();
+            setSearchPillReveal(reveal);
+            if (dots.getParent() instanceof View container) {
+                container.setAlpha(reveal);
+                float scale = 0.85f + 0.15f * reveal;
+                container.setScaleX(scale);
+                container.setScaleY(scale);
+            }
+        }
+    }
+
+    private void setSearchPillReveal(float dotsReveal) {
+        if (mQsb instanceof CompactSearchBar compactBar) {
+            compactBar.setDotsReveal(dotsReveal);
+        }
     }
 
 }

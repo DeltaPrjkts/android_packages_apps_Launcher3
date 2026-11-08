@@ -405,7 +405,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         setPageIndicatorInset();
     }
 
-    private void setPageIndicatorInset() {
+    void setPageIndicatorInset() {
+        if (mLauncher.getHotseat() != null && mLauncher.getHotseat().applySearchPillPageIndicatorLayout()) {
+            return;
+        }
         DeviceProfile grid = mLauncher.getDeviceProfile();
 
         View pageIndicatorContainer = (View) mPageIndicator.getParent();

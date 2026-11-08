@@ -115,6 +115,7 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
                 public void setValue(PageIndicatorDots obj, int alpha) {
                     obj.mPaginationPaint.setAlpha(alpha);
                     obj.invalidate();
+                    obj.notifyRevealChanged();
                 }
             };
 
@@ -130,6 +131,7 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
     private boolean mShouldAutoHide;
     private boolean mIsMoveAnimationQueued;
     private int mToAlpha;
+    private @Nullable Runnable mRevealListener;
 
     /**
      * The current position of the active dot including the animation progress.
@@ -168,6 +170,8 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
         mPaginationPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         mPaginationPaint.setStyle(Style.FILL);
         mPaginationPaint.setColor(Themes.getAttrColor(context, R.attr.pageIndicatorDotColor));
+        mPaginationPaint.setAlpha(INVISIBLE_ALPHA);
+        mToAlpha = INVISIBLE_ALPHA;
         mDotRadius = getResources().getDimension(R.dimen.page_indicator_dot_size) / 2;
         mGapWidth = getResources().getDimension(R.dimen.page_indicator_gap_width);
         mCircleGap = (enableLauncherVisualRefresh())
@@ -268,11 +272,33 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
             mDelayedPaginationFadeHandler.removeCallbacksAndMessages(null);
             animatePaginationToAlpha(VISIBLE_ALPHA);
         }
+        notifyRevealChanged();
+    }
+
+    @Override
+    public void setRevealListener(@Nullable Runnable listener) {
+        mRevealListener = listener;
+    }
+
+    @Override
+    public float getReveal() {
+        if (mNumPages < 2) return 0f;
+        if (!mShouldAutoHide) return 1f;
+        if (mTotalScroll == 0) return 0f;
+        return Math.min(1f, Math.max(0f, mPaginationPaint.getAlpha() / (float) VISIBLE_ALPHA));
+    }
+
+    private void notifyRevealChanged() {
+        if (mRevealListener != null) {
+            mRevealListener.run();
+        }
     }
 
     @Override
     public void setPaintColor(int color) {
+        int currentAlpha = mPaginationPaint.getAlpha();
         mPaginationPaint.setColor(color);
+        mPaginationPaint.setAlpha(currentAlpha);
     }
 
     private void hideAfterDelay() {
@@ -300,6 +326,7 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
             @Override
             public void onAnimationEnd(Animator animation) {
                 mAlphaAnimator = null;
+                notifyRevealChanged();
             }
         });
         mAlphaAnimator.start();
@@ -451,6 +478,7 @@ public class PageIndicatorDots extends View implements Insettable, PageIndicator
         }
 
         requestLayout();
+        notifyRevealChanged();
     }
 
     @Override

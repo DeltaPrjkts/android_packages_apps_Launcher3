@@ -1184,8 +1184,7 @@ public class Launcher extends StatefulActivity<LauncherState>
             mWorkspace.setClipChildren(false);
         }
         // When multiple pages are visible or desktop devices, show persistent page indicator
-        mWorkspace.getPageIndicator().setShouldAutoHide(LauncherPrefs.AUTO_HIDE_DOTS.get(this)
-                && !shouldEnableMouseInteractionChanges(mWorkspace.getContext()));
+        mWorkspace.getPageIndicator().setShouldAutoHide(!keepsPageIndicatorShown());
 
         mPrevLauncherState = mStateManager.getCurrentStableState();
         if (mPrevLauncherState != state && ALL_APPS.equals(state)
@@ -1403,8 +1402,7 @@ public class Launcher extends StatefulActivity<LauncherState>
         mDropTargetBar.setup(mDragController);
         mAllAppsController.setupViews(mScrimView, mAppsView);
 
-        mWorkspace.getPageIndicator().setShouldAutoHide(LauncherPrefs.AUTO_HIDE_DOTS.get(this) &&
-                !shouldEnableMouseInteractionChanges(mWorkspace.getContext()));
+        mWorkspace.getPageIndicator().setShouldAutoHide(!keepsPageIndicatorShown());
         mWorkspace.getPageIndicator().setPaintColor(Themes.getAttrBoolean(
                 this, R.attr.isWorkspaceDarkText) ? Color.BLACK : Color.WHITE);
 
@@ -1882,6 +1880,18 @@ public class Launcher extends StatefulActivity<LauncherState>
             mRightArrow.setAlpha(mWorkspace.getPageCount() == mWorkspace.getCurrentPage() + 1
                     ? DISABLED_ARROW_OPACITY : FULLY_OPAQUE);
         }
+    }
+
+    /**
+     * With a mouse or when auto-hide is disabled, the page dots normally stay shown; sharing the
+     * Search pill spot they still hide once pages settle, so the Search pill comes back.
+     */
+    private boolean keepsPageIndicatorShown() {
+        if (mHotseat != null && mHotseat.isCompactSearchBarEnabled()) {
+            return false;
+        }
+        return !LauncherPrefs.AUTO_HIDE_DOTS.get(this)
+                || shouldEnableMouseInteractionChanges(mWorkspace.getContext());
     }
 
     public LauncherAccessibilityDelegate getAccessibilityDelegate() {

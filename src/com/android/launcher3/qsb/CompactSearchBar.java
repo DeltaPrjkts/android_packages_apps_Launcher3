@@ -59,6 +59,7 @@ public class CompactSearchBar extends FrameLayout
     private float mScaleForReorderBounce = 1f;
 
     private ImageView mActionIcon;
+    private TextView mActionText;
     private View mInner;
     private ObjectAnimator mSquishAnimator;
     private boolean mIsLaunching;
@@ -92,6 +93,7 @@ public class CompactSearchBar extends FrameLayout
         super.onFinishInflate();
 
         mActionIcon = findViewById(R.id.gemini_icon);
+        mActionText = findViewById(R.id.compact_search_bar_text);
         mInner = findViewById(R.id.compact_search_bar_inner);
 
         updateBlurPreferences();
@@ -330,9 +332,8 @@ public class CompactSearchBar extends FrameLayout
                 break;
             case ACTION_UNIVERSAL_SEARCH:
                 mActionIcon.setImageResource(R.drawable.ic_compact_search);
-                TextView textView = findViewById(R.id.compact_search_bar_text);
-                if (textView != null && textView.getTextColors() != null) {
-                    mActionIcon.setImageTintList(textView.getTextColors());
+                if (mActionText != null && mActionText.getTextColors() != null) {
+                    mActionIcon.setImageTintList(mActionText.getTextColors());
                 } else {
                     int textColor = Themes.getAttrColor(mContext, android.R.attr.textColorPrimary);
                     mActionIcon.setImageTintList(ColorStateList.valueOf(textColor));
@@ -596,5 +597,29 @@ public class CompactSearchBar extends FrameLayout
     @Override
     public float getReorderBounceScale() {
         return mScaleForReorderBounce;
+    }
+
+    /**
+     * Cross-fades the compact search bar content (icon & text) with the workspace page dots.
+     * When dotsReveal is 0, the search pill content is fully shown.
+     * When dotsReveal is 1, the search pill content is fully hidden.
+     */
+    public void setDotsReveal(float dotsReveal) {
+        float shown = 1f - dotsReveal;
+        float contentScale = 0.85f + 0.15f * shown;
+
+        if (mActionIcon != null) {
+            mActionIcon.setAlpha(shown);
+            mActionIcon.setScaleX(contentScale);
+            mActionIcon.setScaleY(contentScale);
+        }
+        if (mActionText != null) {
+            mActionText.setAlpha(shown);
+            mActionText.setScaleX(contentScale);
+            mActionText.setScaleY(contentScale);
+        }
+        if (mInner != null) {
+            mInner.setClickable(shown > 0.5f);
+        }
     }
 }

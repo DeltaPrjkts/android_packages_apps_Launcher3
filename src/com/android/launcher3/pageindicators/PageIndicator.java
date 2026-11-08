@@ -63,4 +63,17 @@ public interface PageIndicator {
     default void setPaintColor(int color) {
         // No-op by default
     }
+
+    /**
+     * How visible the indicator is right now, from 0 (hidden) to 1 (shown).
+     */
+    default float getReveal() {
+        return 0f;
+    }
+
+    /**
+     * Sets a listener to be called whenever {@link #getReveal()} may have changed.
+     */
+    default void setRevealListener(Runnable listener) {
+    }
 }
