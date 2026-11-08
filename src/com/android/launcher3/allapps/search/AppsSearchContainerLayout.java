@@ -30,6 +30,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.PaintDrawable;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.speech.RecognizerIntent;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
 import android.text.method.TextKeyListener;
@@ -45,7 +46,6 @@ import com.android.launcher3.ExtendedEditText;
 import com.android.launcher3.Insettable;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
-import com.android.launcher3.qsb.QsbContainerView;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.allapps.ActivityAllAppsContainerView;
 import com.android.launcher3.allapps.AllAppsStore;
@@ -221,13 +221,16 @@ public class AppsSearchContainerLayout extends ExtendedEditText
                     if (rightDrawable != null && touchX >= rightGroupStart) {
                         if (touchX < (rightGroupStart + actionSlotWidth)) {
                             // Mic slot – voice search
-                            String searchPackage = QsbContainerView.getSearchWidgetPackageName(getContext());
-                            if (searchPackage != null) {
-                                Intent voiceIntent = new Intent(Intent.ACTION_VOICE_COMMAND)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                                        .setPackage(searchPackage);
-                                mLauncher.startActivitySafely(v, voiceIntent, null);
+                            Intent voiceIntent = new Intent(RecognizerIntent.ACTION_WEB_SEARCH)
+                                    .setPackage(Utilities.GSA_PACKAGE)
+                                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                            RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH);
+                            if (voiceIntent.resolveActivity(getContext().getPackageManager())
+                                    == null) {
+                                voiceIntent = new Intent(Intent.ACTION_VOICE_COMMAND);
                             }
+                            voiceIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            mLauncher.startActivitySafely(v, voiceIntent, null);
                         } else {
                             // Lens slot
                             if (hasGoogleApp) {
