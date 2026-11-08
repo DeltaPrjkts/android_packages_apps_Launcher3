@@ -388,6 +388,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     }
 
     public void setUniversalSearchActive(boolean active) {
+        if (mUniversalSearchActive == active) {
+            return;
+        }
         mUniversalSearchActive = active;
         if (mSearchContainer instanceof com.android.launcher3.allapps.search.AppsSearchContainerLayout) {
             ((com.android.launcher3.allapps.search.AppsSearchContainerLayout) mSearchContainer).setUniversalSearch(active);
@@ -396,11 +399,16 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
         if (active) {
             // Hide the app grid before the container is shown, without waiting for results.
             animateToSearchState(true, 0);
+            post(() -> {
+                if (getSearchUiManager() != null) {
+                    getSearchUiManager().focusSearchField();
+                }
+            });
         }
     }
 
     private String getSearchBarPlacement() {
-        if (mUniversalSearchActive) {
+        if (mUniversalSearchActive || isSearching()) {
             return "top";
         }
         return LauncherPrefs.ALL_APPS_SEARCH_PLACEMENT.get(getContext());
@@ -410,6 +418,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     public void onClearSearchResult() {
         getMainAdapterProvider().clearHighlightedItem();
         animateToSearchState(false);
+        if (mUniversalSearchActive) {
+            mUniversalSearchActive = false;
+        }
         rebindAdapters();
     }
 
@@ -1567,6 +1578,9 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
                     searchLp.bottomMargin = targetBottomMargin;
                     mSearchContainer.setLayoutParams(searchLp);
                 }
+            } else if (searchLp.bottomMargin != 0) {
+                searchLp.bottomMargin = 0;
+                mSearchContainer.setLayoutParams(searchLp);
             }
         }
         

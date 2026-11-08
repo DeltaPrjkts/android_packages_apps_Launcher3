@@ -50,7 +50,7 @@ public class CaddyRowView extends LinearLayout {
             favorites.setContentDescription(getContext().getString(R.string.caddy_favorites));
             favorites.setStateDescription(getContext().getString(R.string.caddy_hold_to_edit));
             OnLongClickListener edit = v -> {
-                CaddyLibrarySheet.editFavorites(mActivityContext, item.caddyApps, onFavoritesChanged);
+                CaddyLibrarySheet.editFavorites(mActivityContext, item.caddyApps, favorites, onFavoritesChanged);
                 return true;
             };
             favorites.setOnLongClickListener(edit);
@@ -94,7 +94,7 @@ public class CaddyRowView extends LinearLayout {
         card.setOrientation(VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(12));
         card.setBackground(CaddyStyle.background(getContext(), false));
-        OnClickListener open = v -> CaddyLibrarySheet.showCategory(mActivityContext, category);
+        OnClickListener open = v -> CaddyLibrarySheet.showCategory(mActivityContext, category, card);
         card.setOnClickListener(open);
         card.setFocusable(false);
 

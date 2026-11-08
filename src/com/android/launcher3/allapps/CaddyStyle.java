@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.view.CrossWindowBlurListeners;
 
 import androidx.core.graphics.ColorUtils;
 
@@ -35,13 +36,21 @@ final class CaddyStyle {
         float opacity = Math.max(0, Math.min(100,
                 LauncherPrefs.APP_DRAWER_OPACITY.get(context))) / 100f;
         int surface = ColorUtils.blendARGB(base, textColor(context), .12f);
-        int alpha = Math.round(255 * (sheet ? .88f + .12f * opacity : .10f + .38f * opacity));
+        boolean blurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+        int alpha;
+        if (sheet) {
+            alpha = Math.round(255 * (blurEnabled ? .48f + .26f * opacity : .95f));
+        } else {
+            alpha = Math.round(255 * (.10f + .38f * opacity));
+        }
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(ColorUtils.setAlphaComponent(surface, alpha));
-        shape.setCornerRadius(dp(context, sheet ? 28 : 22));
+        shape.setCornerRadius(dp(context, sheet ? 32 : 22));
+        shape.setStroke(dp(context, 1), ColorUtils.setAlphaComponent(
+                textColor(context), sheet ? 36 : 20));
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(android.graphics.Color.WHITE);
-        mask.setCornerRadius(dp(context, sheet ? 28 : 22));
+        mask.setCornerRadius(dp(context, sheet ? 32 : 22));
         return new RippleDrawable(ColorStateList.valueOf(
                 ColorUtils.setAlphaComponent(textColor(context), 24)), shape, mask);
     }

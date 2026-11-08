@@ -376,6 +376,10 @@ public class AppsSearchContainerLayout extends ExtendedEditText
                             return true;
                         }
                     }
+
+                    if (mAppsView != null && !mAppsView.isUniversalSearchActive()) {
+                        mAppsView.setUniversalSearchActive(true);
+                    }
                 }
                 return false;
             }
@@ -461,12 +465,26 @@ public class AppsSearchContainerLayout extends ExtendedEditText
     }
 
     @Override
+    protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
+        super.onFocusChanged(focused, direction, previouslyFocusedRect);
+        if (focused && mAppsView != null && !mAppsView.isUniversalSearchActive()) {
+            mAppsView.setUniversalSearchActive(true);
+        }
+    }
+
+    @Override
     public void focusSearchField() {
+        if (mAppsView != null && !mAppsView.isUniversalSearchActive()) {
+            mAppsView.setUniversalSearchActive(true);
+        }
         mSearchBarController.focusSearchField();
     }
 
     @Override
     public void preDispatchKeyEvent(KeyEvent event) {
+        if (mAppsView != null && !mAppsView.isUniversalSearchActive()) {
+            mAppsView.setUniversalSearchActive(true);
+        }
         // Determine if the key event was actual text, if so, focus the search bar and then dispatch
         // the key normally so that it can process this key event
         if (!mSearchBarController.isSearchFieldFocused() &&
