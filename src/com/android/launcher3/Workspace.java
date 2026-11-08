@@ -216,6 +216,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
      * CellInfo for the cell that is currently being dragged
      */
     protected CellInfo mDragInfo;
+    private WorkspaceBatchEditor mBatchEditor;
 
     /**
      * Target drop area calculated during last acceptDrop call.
@@ -527,6 +528,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             layout.markCellsAsUnoccupiedForView(mDragInfo.cell);
         }
 
+        if (options.isWorkspaceBatchDrag) getBatchEditor().onDragStart();
+
         updateChildrenLayersEnabled();
 
         // Do not add a new page if it is a accessible drag which was not started by the workspace.
@@ -537,7 +540,11 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         boolean addNewPage = !(options.isAccessibleDrag && dragObject.dragSource != this);
         if (addNewPage) {
             mDeferRemoveExtraEmptyScreen = false;
-            addExtraEmptyScreenOnDrag(dragObject);
+            if (options.isWorkspaceBatchDrag) {
+                addExtraEmptyScreens();
+            } else {
+                addExtraEmptyScreenOnDrag(dragObject);
+            }
 
             if (dragObject.dragInfo.itemType == LauncherSettings.Favorites.ITEM_TYPE_APPWIDGET
                     && dragObject.dragSource != this) {
@@ -584,23 +591,31 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
         updateChildrenLayersEnabled();
         StateManager<LauncherState, Launcher> stateManager = mLauncher.getStateManager();
-        stateManager.addStateListener(new StateManager.StateListener<LauncherState>() {
-            @Override
-            public void onStateTransitionComplete(LauncherState finalState) {
-                if (finalState == NORMAL) {
-                    if (!mDeferRemoveExtraEmptyScreen) {
-                        removeExtraEmptyScreen(true /* stripEmptyScreens */);
+        if (!getBatchEditor().isDragging()) {
+            stateManager.addStateListener(new StateManager.StateListener<LauncherState>() {
+                @Override
+                public void onStateTransitionComplete(LauncherState finalState) {
+                    if (finalState == NORMAL) {
+                        if (!mDeferRemoveExtraEmptyScreen) {
+                            removeExtraEmptyScreen(true /* stripEmptyScreens */);
+                        }
+                        stateManager.removeStateListener(this);
                     }
-                    stateManager.removeStateListener(this);
                 }
-            }
-        });
+            });
+        }
 
         if (mAccessibilityDragListener != null) {
             mAccessibilityDragListener.onDragEnd();
         }
         mDragInfo = null;
         mDragSourceInternal = null;
+        getBatchEditor().onDragEnd();
+    }
+
+    public WorkspaceBatchEditor getBatchEditor() {
+        if (mBatchEditor == null) mBatchEditor = new WorkspaceBatchEditor(mLauncher, this);
+        return mBatchEditor;
     }
 
     /**
@@ -704,6 +719,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     }
 
     public void removeAllWorkspaceScreens() {
+        getBatchEditor().finish(false);
         // Disable all layout transitions before removing all pages to ensure that we don't get the
         // transition animations competing with us changing the scroll when we add pages
         disableLayoutTransitions();
@@ -1208,7 +1224,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-        return shouldConsumeTouch(v);
+        return shouldConsumeTouch(v) || (v instanceof CellLayout layout
+                && getBatchEditor().interceptTouch(layout, event));
     }
 
     private boolean isNonTrackpadMouseEvent(MotionEvent ev) {
@@ -1236,8 +1253,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
     @Override
     public boolean dispatchUnhandledMove(View focused, int direction) {
-        if (workspaceInModalState() || !isFinishedSwitchingState()) {
-            // when the home screens are shrunken, shouldn't allow side-scrolling
+        if ((workspaceInModalState() && !mLauncher.isInState(EDIT_MODE))
+                || !isFinishedSwitchingState()) {
             return false;
         }
         return super.dispatchUnhandledMove(focused, direction);
@@ -1311,6 +1328,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     protected void onPageEndTransition() {
         super.onPageEndTransition();
         updateChildrenLayersEnabled();
+        getBatchEditor().refreshIcons();
 
         if (mDragController.isDragging()) {
             if (workspaceInModalState()) {
@@ -1558,7 +1576,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
     @Override
     public int getDescendantFocusability() {
-        if (workspaceInModalState()) {
+        if (workspaceInModalState() && !mLauncher.isInState(EDIT_MODE)) {
             return ViewGroup.FOCUS_BLOCK_DESCENDANTS;
         }
         return super.getDescendantFocusability();
@@ -1766,7 +1784,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             throw new IllegalStateException(msg);
         }
         beginDragShared(child, null, source, (ItemInfo) dragObject,
-                new DragPreviewProvider(child), options);
+                options.isWorkspaceBatchDrag ? getBatchEditor().createDragPreview(child)
+                        : new DragPreviewProvider(child), options);
     }
 
     /**
@@ -1829,7 +1848,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
         if (child instanceof BubbleTextView) {
             BubbleTextView btv = (BubbleTextView) child;
-            if (!dragOptions.isAccessibleDrag) {
+            if (!dragOptions.isAccessibleDrag && !dragOptions.isWorkspaceBatchDrag) {
                 dragOptions.preDragCondition =
                         btv.startLongPressAction(mLauncher.getPopupControllerForAppIcons());
             }
@@ -1916,6 +1935,14 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     public boolean acceptDrop(DragObject d) {
         // If it's an external drop (e.g. from All Apps), check if it should be accepted
         CellLayout dropTargetLayout = mDropToLayout;
+        if (getBatchEditor().isDragging()) {
+            if (dropTargetLayout == null || mLauncher.isHotseatLayout(dropTargetLayout)
+                    || !transitionStateShouldAllowDrop()) return false;
+            mDragViewVisualCenter = d.getVisualCenter(mDragViewVisualCenter);
+            mapPointFromDropLayout(dropTargetLayout, mDragViewVisualCenter);
+            return getBatchEditor().canDrop(dropTargetLayout,
+                    mDragViewVisualCenter[0], mDragViewVisualCenter[1]);
+        }
         if (d.dragSource != this) {
             // Don't accept the drop if we're not over a valid drop target at time of drop
             if (dropTargetLayout == null) {
@@ -2409,6 +2436,12 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         // We want the point to be mapped to the dragTarget.
         if (dropTargetLayout != null) {
             mapPointFromDropLayout(dropTargetLayout, mDragViewVisualCenter);
+        }
+
+        if (options.isWorkspaceBatchDrag) {
+            getBatchEditor().drop(dropTargetLayout,
+                    mDragViewVisualCenter[0], mDragViewVisualCenter[1], d);
+            return;
         }
 
         boolean droppedOnOriginalCell = false;
@@ -2915,6 +2948,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         if (mDragTargetLayout != null) {
             // We want the point to be mapped to the dragTarget.
             mapPointFromDropLayout(mDragTargetLayout, mDragViewVisualCenter);
+
+            if (getBatchEditor().isDragging()) {
+                mDragTargetLayout.revertTempState();
+                if (!mLauncher.isHotseatLayout(mDragTargetLayout)) {
+                    getBatchEditor().visualizeDrop(mDragTargetLayout,
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], d);
+                }
+                return;
+            }
 
             boolean collapseFolder = shouldCollapseFolderForHotseat(item, mDragTargetLayout);
             int spanX = collapseFolder ? 1 : item.spanX;
@@ -3696,6 +3738,11 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
      */
     public void onDropCompleted(final View target, final DragObject d,
                                 final boolean success) {
+        if (getBatchEditor().isDragging()) {
+            getBatchEditor().onDropCompleted();
+            mDragInfo = null;
+            return;
+        }
         if (success) {
             if (target != this && mDragInfo != null) {
                 removeWorkspaceItem(mDragInfo.cell);

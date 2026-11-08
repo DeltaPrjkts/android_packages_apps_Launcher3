@@ -246,6 +246,7 @@ public class LauncherDragController extends DragController<Launcher> {
 
     @Override
     protected void exitDrag() {
+        if (mOptions != null && mOptions.isWorkspaceBatchDrag) return;
         if (!mIsInPreDrag && !mActivity.isInState(EDIT_MODE)) {
             mActivity.getStateManager().goToState(NORMAL, SPRING_LOADED_EXIT_DELAY);
         }
@@ -253,6 +254,7 @@ public class LauncherDragController extends DragController<Launcher> {
 
     @Override
     protected boolean endWithFlingAnimation() {
+        if (mOptions != null && mOptions.isWorkspaceBatchDrag) return false;
         if (mDragObject != null && mDragObject.dragView != null) {
             updateDescendantsAccessibility(mDragObject.dragView, /*accessible=*/ true);
         }

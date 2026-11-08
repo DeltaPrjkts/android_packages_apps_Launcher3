@@ -612,7 +612,7 @@ public abstract class DragController<T extends ActivityContext>
         mCoordinatesTemp[1] = y;
         final Rect r = mRectTemp;
         final ArrayList<DropTarget> dropTargets = mDropTargets;
-        final int count = dropTargets.size();
+        final int count = mOptions != null && mOptions.isWorkspaceBatchDrag ? 0 : dropTargets.size();
         for (int i = count - 1; i >= 0; i--) {
             DropTarget target = dropTargets.get(i);
             if (!target.isDropEnabled())

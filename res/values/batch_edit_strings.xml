@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 Lunaris AOSP. SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="batch_edit_done">Done</string>
+    <string name="batch_edit_hint">Tap apps to select. Drag a selected app to another page, or swipe and tap Move here.</string>
+    <string name="batch_edit_move_here">Move here</string>
+    <string name="batch_edit_new_page">New page</string>
+    <string name="batch_edit_select_apps">Select apps</string>
+    <string name="batch_edit_selected">Selected</string>
+    <string name="batch_edit_not_selected">Not selected</string>
+    <string name="batch_edit_no_space">Not enough room for all selected apps. Choose another page.</string>
+    <plurals name="batch_edit_count">
+        <item quantity="one">%d app selected</item>
+        <item quantity="other">%d apps selected</item>
+    </plurals>
+    <plurals name="batch_edit_moved">
+        <item quantity="one">Moved %d app</item>
+        <item quantity="other">Moved %d apps</item>
+    </plurals>
+</resources>

@@ -18,6 +18,7 @@ package com.android.launcher3.states
 import android.content.Context
 import com.android.launcher3.Launcher
 import com.android.launcher3.LauncherState
+import com.android.launcher3.LauncherUiState
 import com.android.launcher3.logging.StatsLogManager
 import com.android.launcher3.views.ActivityContext
 
@@ -29,7 +30,7 @@ class EditModeState(id: Int) : LauncherState(id, StatsLogManager.LAUNCHER_STATE_
 
         private val STATE_FLAGS =
             (FLAG_MULTI_PAGE or
-                FLAG_WORKSPACE_INACCESSIBLE or
+                FLAG_HOTSEAT_INACCESSIBLE or
                 FLAG_DISABLE_RESTORE or
                 FLAG_WORKSPACE_ICONS_CAN_BE_DRAGGED or
                 FLAG_WORKSPACE_HAS_BACKGROUNDS)
@@ -37,13 +38,14 @@ class EditModeState(id: Int) : LauncherState(id, StatsLogManager.LAUNCHER_STATE_
 
     override fun getTransitionDuration(context: ActivityContext, isToState: Boolean) = 150
 
+    override fun getVisibleElements(launcherUiState: LauncherUiState) = WORKSPACE_PAGE_INDICATOR
+
     override fun <T> getDepthUnchecked(context: T): Float where T : Context?, T : ActivityContext? {
         return DEPTH_15_PERCENT
     }
 
     override fun getWorkspaceScaleAndTranslation(launcher: Launcher): ScaleAndTranslation {
-        val scale = launcher.deviceProfile.getWorkspaceSpringLoadScale(launcher)
-        return ScaleAndTranslation(scale, 0f, 0f)
+        return launcher.workspace.batchEditor.workspaceScaleAndTranslation
     }
 
     override fun getHotseatScaleAndTranslation(launcher: Launcher): ScaleAndTranslation {
@@ -53,9 +55,5 @@ class EditModeState(id: Int) : LauncherState(id, StatsLogManager.LAUNCHER_STATE_
 
     override fun getWorkspaceBackgroundAlpha(launcher: Launcher): Float {
         return 0.2f
-    }
-
-    override fun onLeavingState(launcher: Launcher?, toState: LauncherState?) {
-        // cleanup any changes to workspace
     }
 }

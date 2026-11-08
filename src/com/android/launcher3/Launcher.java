@@ -1040,6 +1040,7 @@ public class Launcher extends StatefulActivity<LauncherState>
     @Override
     protected void onStop() {
         super.onStop();
+        mWorkspace.getBatchEditor().finish(false);
         if (mDeferOverlayCallbacks) {
             checkIfOverlayStillDeferred();
         } else {
@@ -1169,6 +1170,7 @@ public class Launcher extends StatefulActivity<LauncherState>
             mStateManager.goToState(NORMAL, false /* animated */);
             return;
         }
+        mWorkspace.getBatchEditor().onStateChanged(state);
         if (mDeferOverlayCallbacks) {
             scheduleDeferredCheck();
         }
@@ -1214,6 +1216,7 @@ public class Launcher extends StatefulActivity<LauncherState>
     @Override
     public void onStateSetEnd(LauncherState state) {
         super.onStateSetEnd(state);
+        mWorkspace.getBatchEditor().onStateTransitionComplete(state);
         getAppWidgetHolder().setStateIsNormal(state == LauncherState.NORMAL);
         getWorkspace().setClipChildren(!state.hasFlag(FLAG_MULTI_PAGE));
 
@@ -1829,6 +1832,7 @@ public class Launcher extends StatefulActivity<LauncherState>
 
     @Override
     public void onDestroy() {
+        mWorkspace.getBatchEditor().close();
         super.onDestroy();
         ACTIVITY_TRACKER.onContextDestroyed(this);
 
@@ -2448,6 +2452,7 @@ public class Launcher extends StatefulActivity<LauncherState>
             }
         }
         workspace.requestLayout();
+        workspace.getBatchEditor().refreshIcons();
     }
 
     /**
@@ -2635,6 +2640,7 @@ public class Launcher extends StatefulActivity<LauncherState>
     @Override
     public void bindItemsUpdated(Set<ItemInfo> updates) {
         mModelCallbacks.bindItemsUpdated(updates);
+        mWorkspace.getBatchEditor().refreshIcons();
     }
 
     /**
@@ -2642,6 +2648,7 @@ public class Launcher extends StatefulActivity<LauncherState>
      */
     @Override
     public void bindWorkspaceComponentsRemoved(Predicate<ItemInfo> matcher) {
+        mWorkspace.getBatchEditor().onItemsRemoved(matcher);
         mModelCallbacks.bindWorkspaceComponentsRemoved(matcher);
     }
 

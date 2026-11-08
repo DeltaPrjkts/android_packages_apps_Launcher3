@@ -25,6 +25,8 @@ import com.android.launcher3.DropTarget;
  */
 public class DragOptions {
 
+    public boolean isWorkspaceBatchDrag = false;
+
     /** Whether or not an accessible drag operation is in progress. */
     public boolean isAccessibleDrag = false;
 

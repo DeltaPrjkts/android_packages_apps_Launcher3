@@ -23,6 +23,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewParent;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Nullable;
 
@@ -115,12 +116,25 @@ public class LauncherAccessibilityDelegate extends BaseAccessibilityDelegate<Lau
                 R.string.action_close, KeyEvent.KEYCODE_X));
     }
 
+    @Override
+    public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfo(host, info);
+        if (mContext.getWorkspace().getBatchEditor().isActive()
+                && host instanceof BubbleTextView
+                && host.getTag() instanceof WorkspaceItemInfo item
+                && item.container == LauncherSettings.Favorites.CONTAINER_DESKTOP) {
+            info.setCheckable(true);
+            info.setChecked(mContext.getWorkspace().getBatchEditor().isSelected(host));
+        }
+    }
+
     private static boolean isNotInShortcutMenu(@Nullable View view) {
         return view == null || !(view.getParent() instanceof DeepShortcutView);
     }
 
     @Override
     protected void getSupportedActions(View host, ItemInfo item, List<LauncherAction> out) {
+        if (mContext.getWorkspace().getBatchEditor().isActive()) return;
         // If the request came from keyboard, do not add custom shortcuts as that is already
         // exposed as a direct shortcut
         if (isNotInShortcutMenu(host) && ShortcutUtil.supportsShortcuts(item)) {
@@ -186,6 +200,10 @@ public class LauncherAccessibilityDelegate extends BaseAccessibilityDelegate<Lau
     @Override
     protected boolean performAction(final View host, final ItemInfo item, int action,
             boolean fromKeyboard) {
+        if (mContext.getWorkspace().getBatchEditor().isActive()) {
+            return action == ACTION_LONG_CLICK
+                    && mContext.getWorkspace().getBatchEditor().onClick(host);
+        }
         if (action == ACTION_LONG_CLICK) {
             if (host instanceof WidgetStackView) {
                 return mContext.getPopupControllerForHomeScreenItems().show(host) != null;

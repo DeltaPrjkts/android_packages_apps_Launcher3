@@ -97,6 +97,7 @@ public class ItemClickHandler {
 
         Launcher launcher = Launcher.getLauncher(v.getContext());
         if (!launcher.getWorkspace().isFinishedSwitchingState()) return;
+        if (launcher.getWorkspace().getBatchEditor().onClick(v)) return;
 
         Object tag = v.getTag();
         if (tag instanceof WorkspaceItemInfo) {
@@ -353,6 +354,7 @@ public class ItemClickHandler {
      * @param v The view that was clicked. Must be a tagged with a {@link WorkspaceItemInfo}.
      */
     public static void onClickAppShortcut(View v, WorkspaceItemInfo shortcut, Launcher launcher) {
+        if (launcher.getWorkspace().getBatchEditor().onClick(v)) return;
         if (shortcut.isDisabled() && handleDisabledItemClicked(shortcut, launcher)) {
             return;
         }

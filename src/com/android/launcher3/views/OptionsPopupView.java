@@ -18,7 +18,6 @@ package com.android.launcher3.views;
 import static com.android.launcher3.BuildConfig.WIDGETS_ENABLED;
 import static com.android.launcher3.LauncherState.ALL_APPS;
 import static com.android.launcher3.LauncherState.EDIT_MODE;
-import static com.android.launcher3.config.FeatureFlags.MULTI_SELECT_EDIT_MODE;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.IGNORE;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_ALL_APPS_TAP_OR_LONGPRESS;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_SETTINGS_BUTTON_TAP_OR_LONGPRESS;
@@ -286,7 +285,7 @@ public class OptionsPopupView<T extends Context & ActivityContext> extends Arrow
                     LAUNCHER_WIDGETSTRAY_BUTTON_TAP_OR_LONGPRESS,
                     OptionsPopupView::onWidgetsClicked));
         }
-        if (MULTI_SELECT_EDIT_MODE.get()) {
+        if (!LauncherPrefs.WORKSPACE_LOCK.get(launcher)) {
             options.add(new OptionItem(launcher,
                     R.string.edit_home_screen,
                     R.drawable.enter_home_gardening_icon,
@@ -316,6 +315,8 @@ public class OptionsPopupView<T extends Context & ActivityContext> extends Arrow
 
     private static boolean enterHomeGardening(View view) {
         Launcher launcher = Launcher.getLauncher(view.getContext());
+        if (launcher.isWorkspaceLocked() || LauncherPrefs.WORKSPACE_LOCK.get(launcher)
+                || launcher.getDragController().isDragging()) return false;
         launcher.getStateManager().goToState(EDIT_MODE);
         return true;
     }
