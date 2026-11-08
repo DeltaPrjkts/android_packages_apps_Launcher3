@@ -1472,10 +1472,34 @@ constructor(
                 setDrawable(icon)
                 asView().setOnClickListener {
                     if (!confirmSecondSplitSelectApp()) {
+                        val recents = recentsView
+                        if (recents != null && recents.isStackRecentsStyleActive) {
+                            val pageIndex = recents.indexOfChild(this@TaskView)
+                            if (
+                                pageIndex >= 0 &&
+                                    (this@TaskView != recents.currentPageTaskView ||
+                                        !recents.isTaskInExpectedScrollPosition(this@TaskView))
+                            ) {
+                                recents.snapToPage(pageIndex)
+                                return@setOnClickListener
+                            }
+                        }
                         showTaskMenu(this)
                     }
                 }
                 asView().setOnLongClickListener {
+                    val recents = recentsView
+                    if (recents != null && recents.isStackRecentsStyleActive) {
+                        val pageIndex = recents.indexOfChild(this@TaskView)
+                        if (
+                            pageIndex >= 0 &&
+                                (this@TaskView != recents.currentPageTaskView ||
+                                    !recents.isTaskInExpectedScrollPosition(this@TaskView))
+                        ) {
+                            recents.snapToPage(pageIndex)
+                            return@setOnLongClickListener true
+                        }
+                    }
                     requestDisallowInterceptTouchEvent(true)
                     showTaskMenu(this)
                 }
@@ -1511,6 +1535,18 @@ constructor(
     private fun onClick() {
         if (confirmSecondSplitSelectApp()) {
             return
+        }
+        val recents = recentsView
+        if (recents != null && recents.isStackRecentsStyleActive) {
+            val pageIndex = recents.indexOfChild(this)
+            if (
+                pageIndex >= 0 &&
+                    (this != recents.currentPageTaskView ||
+                        !recents.isTaskInExpectedScrollPosition(this))
+            ) {
+                recents.snapToPage(pageIndex)
+                return
+            }
         }
         launchWithAnimation()
         container.statsLogManager
