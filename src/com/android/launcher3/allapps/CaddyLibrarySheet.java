@@ -315,12 +315,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         mPanel.setAlpha(0f);
 
         if (!ValueAnimator.areAnimatorsEnabled()) {
-            applyAnimationProgress(1f);
-            mIsOpenAndSettled = true;
-            mPanel.setPanelBackgroundAlpha(1f);
-            mPanel.postInvalidate();
-            mPanel.requestFocus();
-            announceAccessibilityChanges();
+            finishOpen();
             return;
         }
 
@@ -413,6 +408,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         if (mRecycler == null || mPanel == null) {
             return;
         }
+        mRecycler.setClipChildren(false);
 
         BaseDragLayer dragLayer = mActivityContext.getDragLayer();
         if (dragLayer == null) {
@@ -567,12 +563,7 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
         int targetWidth = mPanel.getWidth();
         int targetHeight = mPanel.getHeight();
         if (targetWidth <= 0 || targetHeight <= 0) {
-            applyAnimationProgress(1f);
-            mIsOpenAndSettled = true;
-            mPanel.setPanelBackgroundAlpha(1f);
-            mPanel.postInvalidate();
-            mPanel.requestFocus();
-            announceAccessibilityChanges();
+            finishOpen();
             return;
         }
 
@@ -601,17 +592,21 @@ public class CaddyLibrarySheet extends AbstractFloatingView implements DragContr
                     return;
                 }
                 mCurrentAnimator = null;
-                applyAnimationProgress(1f);
-                resetIconTransitions();
-                mPanel.setPanelBackgroundAlpha(1f);
-                mIsOpenAndSettled = true;
-                mPanel.postInvalidate();
-                mPanel.requestFocus();
-                announceAccessibilityChanges();
+                finishOpen();
             }
         });
         mCurrentAnimator = animator;
         animator.start();
+    }
+
+    private void finishOpen() {
+        applyAnimationProgress(1f);
+        resetIconTransitions();
+        mIsOpenAndSettled = true;
+        mRecycler.setClipChildren(true);
+        mPanel.postInvalidate();
+        mPanel.requestFocus();
+        announceAccessibilityChanges();
     }
 
     private void applyAnimationProgress(float progress) {
