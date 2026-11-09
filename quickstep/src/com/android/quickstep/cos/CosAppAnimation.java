@@ -7,6 +7,7 @@ package com.android.quickstep.cos;
 
 import android.content.Context;
 import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 
 import com.android.internal.util.lunaris.SpringInterpolator;
 import com.android.launcher3.LauncherPrefs;
@@ -19,7 +20,7 @@ public final class CosAppAnimation {
     public static final long WALLPAPER_OPEN_DURATION = 500;
     public static final long WALLPAPER_CLOSE_DURATION = 900;
     public static final float HOME_SCALE = 0.9f;
-    public static final Interpolator OPEN = spring(420f, 1.04f, LAUNCH_DURATION);
+    public static final Interpolator OPEN = new PathInterpolator(0.2f, 0f, 0f, 1f);
     public static final Interpolator REVEAL = spring(324f, 1f, REVEAL_DURATION);
     public static final Interpolator WALLPAPER_OPEN = spring(196f, 1f, WALLPAPER_OPEN_DURATION);
     public static final Interpolator WALLPAPER_CLOSE = spring(49f, 1f, WALLPAPER_CLOSE_DURATION);

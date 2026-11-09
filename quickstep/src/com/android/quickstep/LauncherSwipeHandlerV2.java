@@ -54,6 +54,7 @@ import com.android.quickstep.util.ActiveGestureLog;
 import com.android.quickstep.util.LunarisBarAnimation;
 import com.android.quickstep.util.NothingAppAnimation;
 import com.android.quickstep.cos.CosAppAnimation;
+import com.android.quickstep.cos.CosCloseAnimation;
 import com.android.quickstep.cos.CosWorkspaceRevealAnim;
 import com.android.quickstep.util.RectFSpringAnim;
 import com.android.quickstep.util.ScalingWorkspaceRevealAnim;
@@ -472,6 +473,14 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
     }
 
     private class LauncherHomeAnimationFactory extends HomeAnimationFactory {
+
+        @Override
+        public void setAnimation(RectFSpringAnim anim) {
+            super.setAnimation(anim);
+            if (CosAppAnimation.isEnabled(mContainer)) {
+                anim.addAnimatorListener(new CosCloseAnimation(mContainer, anim::end));
+            }
+        }
 
         /**
          * Returns a view which should be excluded from the Workspace animation, or null if there
