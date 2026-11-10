@@ -123,6 +123,9 @@
     <string name="hotseat_bg_summary">Add translucent background to the app dock</string>
     <string name="hotseat_blur_title">Hotseat blur</string>
     <string name="hotseat_blur_summary">Apply blur effect to hotseat background</string>
+    <string name="hotseat_shape_title">Hotseat background shape</string>
+    <string name="hotseat_shape_capsule">Capsule</string>
+    <string name="hotseat_shape_rounded_square">Rounded square</string>
 
     <!-- Background opacity -->
     <string name="background_opacity_title">Background opacity</string>

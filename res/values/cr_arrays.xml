@@ -45,6 +45,17 @@
         <item>universal_search</item>
     </string-array>
 
+    <!-- Hotseat background shape -->
+    <string-array name="hotseat_shape_entries">
+        <item>@string/hotseat_shape_capsule</item>
+        <item>@string/hotseat_shape_rounded_square</item>
+    </string-array>
+
+    <string-array name="hotseat_shape_values" translatable="false">
+        <item>capsule</item>
+        <item>rounded_square</item>
+    </string-array>
+
     <!-- App drawer searchbar -->
     <string-array name="allapps_search_placement_entries">
         <item>@string/drawer_search_location_hidden</item>

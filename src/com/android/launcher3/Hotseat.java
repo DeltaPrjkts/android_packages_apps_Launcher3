@@ -99,6 +99,9 @@ public class Hotseat extends CellLayout implements Insettable {
     private static final float BACKGROUND_ICON_PADDING_DP = 10f;
     private static final float BACKGROUND_END_PADDING_DP = 14f;
 
+    public static final String HOTSEAT_SHAPE_CAPSULE = "capsule";
+    public static final String HOTSEAT_SHAPE_ROUNDED_SQUARE = "rounded_square";
+
     @ViewDebug.ExportedProperty(category = "launcher")
     private boolean mHasVerticalHotseat;
     private Workspace<?> mWorkspace;
@@ -124,6 +127,7 @@ public class Hotseat extends CellLayout implements Insettable {
     private final Runnable mBindPageIndicatorRunnable = this::bindPageIndicatorToSearchPill;
     private boolean mShowHotseatBg;
     private boolean mHotseatBlur;
+    private String mHotseatShape = HOTSEAT_SHAPE_CAPSULE;
     private int mBlurDepth;
     private boolean mCrossWindowBlurEnabled;
     private final Consumer<Boolean> mCrossWindowBlurListener = this::onCrossWindowBlurEnabledChanged;
@@ -483,6 +487,7 @@ public class Hotseat extends CellLayout implements Insettable {
         LauncherPrefs.get(getContext()).addListener(mPrefChangeListener,
                 LauncherPrefs.SHOW_HOTSEAT_BG,
                 LauncherPrefs.HOTSEAT_BLUR,
+                LauncherPrefs.HOTSEAT_SHAPE,
                 LauncherPrefs.BLUR_DEPTH,
                 LauncherPrefs.HOTSEAT_OPACITY);
         updateBackgroundPreferences();
@@ -499,6 +504,7 @@ public class Hotseat extends CellLayout implements Insettable {
         LauncherPrefs.get(getContext()).removeListener(mPrefChangeListener,
                 LauncherPrefs.SHOW_HOTSEAT_BG,
                 LauncherPrefs.HOTSEAT_BLUR,
+                LauncherPrefs.HOTSEAT_SHAPE,
                 LauncherPrefs.BLUR_DEPTH,
                 LauncherPrefs.HOTSEAT_OPACITY);
         super.onDetachedFromWindow();
@@ -539,6 +545,7 @@ public class Hotseat extends CellLayout implements Insettable {
         boolean wasShowingBackground = mShowHotseatBg;
         mShowHotseatBg = LauncherPrefs.SHOW_HOTSEAT_BG.get(context);
         mHotseatBlur = LauncherPrefs.HOTSEAT_BLUR.get(context);
+        mHotseatShape = LauncherPrefs.HOTSEAT_SHAPE.get(context);
         mBlurDepth = Math.max(0, LauncherPrefs.BLUR_DEPTH.get(context));
         mBackdropBlur.setBlurRadiusPx(mBlurDepth);
         int opacity = Utilities.boundToRange(LauncherPrefs.HOTSEAT_OPACITY.get(context), 0, 100);
@@ -584,7 +591,15 @@ public class Hotseat extends CellLayout implements Insettable {
         }
 
         updatePillBounds();
-        float cornerRadius = Math.min(mPillRect.width(), mPillRect.height()) / 2f;
+        float cornerRadius;
+        if (HOTSEAT_SHAPE_ROUNDED_SQUARE.equals(mHotseatShape)) {
+            float maxRadius = Math.min(mPillRect.width(), mPillRect.height()) / 2f;
+            float defaultRadius = getContext().getResources().getDimension(
+                    R.dimen.hotseat_rounded_square_corner_radius);
+            cornerRadius = Math.min(maxRadius, defaultRadius);
+        } else {
+            cornerRadius = Math.min(mPillRect.width(), mPillRect.height()) / 2f;
+        }
         if (canvas.isHardwareAccelerated()) {
             updateBlurState();
             if (mBackdropBlur.isEnabled()) {
@@ -611,8 +626,48 @@ public class Hotseat extends CellLayout implements Insettable {
         int paddingY = Utilities.dpToPx(mHasVerticalHotseat
                 ? BACKGROUND_END_PADDING_DP : BACKGROUND_ICON_PADDING_DP);
 
-        cellToRect(0, 0, 1, 1, mTempCellRect1);
-        cellToRect(mCountX - 1, mCountY - 1, 1, 1, mTempCellRect2);
+        ShortcutAndWidgetContainer container = getShortcutsAndWidgets();
+        int minCellX = Integer.MAX_VALUE;
+        int maxCellX = Integer.MIN_VALUE;
+        int minCellY = Integer.MAX_VALUE;
+        int maxCellY = Integer.MIN_VALUE;
+        int iconCount = 0;
+
+        if (container != null) {
+            for (int i = 0; i < container.getChildCount(); i++) {
+                View child = container.getChildAt(i);
+                if (child.getVisibility() != GONE
+                        && child.getLayoutParams() instanceof CellLayoutLayoutParams lp) {
+                    // Reorder previews move visible icons to temporary cells. The invisible
+                    // dragged icon keeps its original slot; its temporary cells are not updated.
+                    boolean useTmpCoords = lp.useTmpCoords && child.getVisibility() == VISIBLE;
+                    int cellX = useTmpCoords ? lp.getTmpCellX() : lp.getCellX();
+                    int cellY = useTmpCoords ? lp.getTmpCellY() : lp.getCellY();
+                    minCellX = Math.min(minCellX, cellX);
+                    maxCellX = Math.max(maxCellX, cellX + lp.cellHSpan - 1);
+                    minCellY = Math.min(minCellY, cellY);
+                    maxCellY = Math.max(maxCellY, cellY + lp.cellVSpan - 1);
+                    iconCount++;
+                }
+            }
+        }
+
+        if (iconCount == 0) {
+            minCellX = 0;
+            maxCellX = Math.max(0, mCountX - 1);
+            minCellY = 0;
+            maxCellY = Math.max(0, mCountY - 1);
+        }
+
+        if (HOTSEAT_SHAPE_ROUNDED_SQUARE.equals(mHotseatShape)
+                && minCellX == maxCellX && minCellY == maxCellY) {
+            int pad = Math.max(paddingX, paddingY);
+            paddingX = pad;
+            paddingY = pad;
+        }
+
+        cellToRect(minCellX, minCellY, 1, 1, mTempCellRect1);
+        cellToRect(maxCellX, maxCellY, 1, 1, mTempCellRect2);
         mPillRect.set(
                 Math.round(Math.min(mTempCellRect1.exactCenterX(), mTempCellRect2.exactCenterX())
                         - iconSize / 2f - paddingX + containerTx),

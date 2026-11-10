@@ -441,6 +441,16 @@
             android:dependency="pref_show_hotseat_bg"
             launcher:iconSpaceReserved="false" />
 
+        <ListPreference
+            android:key="pref_hotseat_shape"
+            android:title="@string/hotseat_shape_title"
+            android:summary="%s"
+            android:entries="@array/hotseat_shape_entries"
+            android:entryValues="@array/hotseat_shape_values"
+            android:defaultValue="capsule"
+            android:dependency="pref_show_hotseat_bg"
+            launcher:iconSpaceReserved="false" />
+
         <com.android.launcher3.settings.preferences.CustomSeekBarPreference
             android:key="pref_hotseat_opacity"
             android:title="@string/background_opacity_title"
