@@ -666,6 +666,16 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     }
 
     protected void rebindAdapters(boolean force) {
+        int descendantFocusability = getDescendantFocusability();
+        setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
+        try {
+            rebindAdaptersInternal(force);
+        } finally {
+            setDescendantFocusability(descendantFocusability);
+        }
+    }
+
+    private void rebindAdaptersInternal(boolean force) {
         Log.d(TAG, "rebindAdapters: force: " + force);
         if (mSearchTransitionController.isRunning()) {
             mRebindAdaptersAfterSearchAnimation = true;
