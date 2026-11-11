@@ -88,7 +88,7 @@ public class QsbLayoutGoogle extends FrameLayout
 
         post(() -> {
             View parent = (View) getParent();
-            if (parent != null) {
+            if (parent != null && parent.getBackground() == null) {
                 parent.setBackground(new QsbOuterDrawable(mContext));
             }
         });

@@ -155,7 +155,7 @@ public class CompactSearchBar extends FrameLayout
     }
 
     private void updateBlurPreferences() {
-        mBlurEnabled = LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.get(mContext);
+        mBlurEnabled = LauncherPrefs.SEARCH_BAR_BLUR.get(mContext);
         mBlurDepth = Math.max(0, LauncherPrefs.BLUR_DEPTH.get(mContext));
         mBackdropBlur.setBlurRadiusPx(mBlurDepth);
         updateBlurState();
@@ -169,7 +169,7 @@ public class CompactSearchBar extends FrameLayout
                 || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)
                 || LauncherPrefs.HOTSEAT_QSB_STROKE_WIDTH.getSharedPrefKey().equals(key)
                 || LauncherPrefs.SEARCH_RADIUS_SIZE.getSharedPrefKey().equals(key)
-                || LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey().equals(key)
+                || LauncherPrefs.SEARCH_BAR_BLUR.getSharedPrefKey().equals(key)
                 || LauncherPrefs.BLUR_DEPTH.getSharedPrefKey().equals(key)) {
             updateBlurPreferences();
             setIcon();

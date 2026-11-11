@@ -10,7 +10,9 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
@@ -19,23 +21,31 @@ import android.graphics.drawable.PaintDrawable;
 import android.net.Uri;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.CrossWindowBlurListeners;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+
 import com.android.app.animation.Interpolators;
+import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
 import com.android.launcher3.Utilities;
+import com.android.launcher3.graphics.ThemeManager;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.util.MultiTranslateDelegate;
 import com.android.launcher3.util.Themes;
 import com.android.launcher3.views.FloatingIconViewCompanion;
 
+import java.util.function.Consumer;
+
 public class QsbLayout extends FrameLayout
-        implements Reorderable, FloatingIconViewCompanion {
+        implements Reorderable, FloatingIconViewCompanion,
+        SharedPreferences.OnSharedPreferenceChangeListener {
 
     private static final String TAG = "QsbLayout";
 
@@ -53,8 +63,26 @@ public class QsbLayout extends FrameLayout
 
     private boolean mIsThemed;
 
+    private final AxViewBackdropBlur mBackdropBlur = new AxViewBackdropBlur(this, false);
+    private final Consumer<Boolean> mCrossWindowBlurListener = this::onCrossWindowBlurEnabledChanged;
+    private final ThemeManager.ThemeChangeListener mThemeChangeListener = () -> {
+        mIsThemed = LauncherPrefs.DOCK_THEME.get(getContext());
+        setupGIcon();
+        setupLensIcon();
+        setupMicIcon();
+        setupGeminiIcon();
+        setUpBackground();
+        clipIconRipples();
+        postInvalidate();
+    };
+    private boolean mCrossWindowBlurEnabled;
+    private boolean mBlurEnabled;
+    private int mBlurDepth;
+    private boolean mBlurDrawn;
+
     private boolean mLandingSquish;
     private static final float LANDING_SQUISH_INTENSITY = 0.55f;
+
     private ObjectAnimator mSquishAnimator;
     private View mSquishingView;
     private boolean mIsLaunching;
@@ -86,6 +114,7 @@ public class QsbLayout extends FrameLayout
             inner.setTag(qsbInfo);
         }
 
+        updateBlurPreferences();
         setUpMainSearch();
         setUpBackground();
         clipIconRipples();
@@ -123,7 +152,9 @@ public class QsbLayout extends FrameLayout
     private void setUpBackground() {
         if (inner == null) return;
         float cornerRadius = getCornerRadius();
-        int alphaValue = (LauncherPrefs.HOTSEAT_QSB_OPACITY.get(getContext()) * 255) / 100;
+        boolean canBlur = mBlurDrawn && isBlurAvailable();
+        int opacity = Utilities.boundToRange(LauncherPrefs.HOTSEAT_QSB_OPACITY.get(getContext()), 0, 100);
+        int alphaValue = Math.round(255f * opacity / 100f * (canBlur ? 0.45f : 1f));
         int baseColor = Themes.getAttrColor(getContext(), R.attr.qsbFillColor);
         if (LauncherPrefs.DOCK_THEME.get(getContext()))
             baseColor = Themes.getAttrColor(getContext(), R.attr.qsbFillColorThemed);
@@ -167,6 +198,13 @@ public class QsbLayout extends FrameLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         cancelSquishAnimation();
+        ThemeManager.INSTANCE.get(getContext()).addChangeListener(mThemeChangeListener);
+        LauncherPrefs.getPrefs(getContext()).registerOnSharedPreferenceChangeListener(this);
+        mBackdropBlur.onAttachedToWindow();
+        mCrossWindowBlurEnabled = CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+        CrossWindowBlurListeners.getInstance().addListener(
+                getContext().getMainExecutor(), mCrossWindowBlurListener);
+        updateBlurPreferences();
         mIsThemed = LauncherPrefs.DOCK_THEME.get(getContext());
         setUpMainSearch();
         setUpBackground();
@@ -175,11 +213,17 @@ public class QsbLayout extends FrameLayout
         setupLensIcon();
         setupMicIcon();
         setupGeminiIcon();
+        postInvalidate();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         cancelSquishAnimation();
+        mBackdropBlur.onDetachedFromWindow();
+        mBlurDrawn = false;
+        CrossWindowBlurListeners.getInstance().removeListener(mCrossWindowBlurListener);
+        ThemeManager.INSTANCE.get(getContext()).removeChangeListener(mThemeChangeListener);
+        LauncherPrefs.getPrefs(getContext()).unregisterOnSharedPreferenceChangeListener(this);
         super.onDetachedFromWindow();
         setOnClickListener(null);
         if (gIcon != null) gIcon.setOnClickListener(null);
@@ -192,7 +236,12 @@ public class QsbLayout extends FrameLayout
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
-        if (visibility != VISIBLE) {
+        if (visibility == VISIBLE) {
+            updateBlurPreferences();
+            setUpBackground();
+            postInvalidate();
+        } else {
+            hideBlur();
             cancelSquishAnimation();
         }
     }
@@ -200,8 +249,136 @@ public class QsbLayout extends FrameLayout
     @Override
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
+        mBackdropBlur.onVisibilityAggregated(isVisible);
         if (!isVisible) {
+            hideBlur();
             cancelSquishAnimation();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (changed && mBlurEnabled) {
+            postInvalidate();
+        }
+    }
+
+    @Override
+    protected boolean verifyDrawable(@NonNull Drawable who) {
+        return super.verifyDrawable(who)
+                || (mBackdropBlur != null && mBackdropBlur.verifyDrawable(who));
+    }
+
+    private void onCrossWindowBlurEnabledChanged(boolean enabled) {
+        mCrossWindowBlurEnabled = enabled;
+        updateBlurState();
+        setUpBackground();
+        postInvalidate();
+    }
+
+    private void updateBlurPreferences() {
+        Context context = getContext();
+        mBlurEnabled = LauncherPrefs.SEARCH_BAR_BLUR.get(context);
+        mBlurDepth = Math.max(0, LauncherPrefs.BLUR_DEPTH.get(context));
+        mBackdropBlur.setBlurRadiusPx(mBlurDepth);
+        updateBlurState();
+    }
+
+    private boolean isBlurAvailable() {
+        return mBlurEnabled && mCrossWindowBlurEnabled && mBlurDepth > 0
+                && isHardwareAccelerated();
+    }
+
+    private boolean canDrawBlur() {
+        return isBlurAvailable() && isAttachedToWindow() && inner != null && inner.isShown()
+                && inner.getWidth() > 0 && inner.getHeight() > 0
+                && getWindowVisibility() == VISIBLE;
+    }
+
+    private void updateBlurState() {
+        mBackdropBlur.setEnabled(canDrawBlur());
+        if (inner != null) {
+            mBackdropBlur.setSurfaceAlpha(Math.round(255f
+                    * Utilities.boundToRange(inner.getAlpha(), 0f, 1f)));
+        }
+    }
+
+    private void hideBlur() {
+        mBackdropBlur.setEnabled(false);
+        if (mBlurDrawn) {
+            mBlurDrawn = false;
+            setUpBackground();
+        }
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        drawBlur(canvas);
+        super.dispatchDraw(canvas);
+    }
+
+    private void drawBlur(Canvas canvas) {
+        if (!canvas.isHardwareAccelerated() || !canDrawBlur()) {
+            hideBlur();
+            return;
+        }
+
+        updateBlurState();
+        int left = inner.getLeft();
+        int top = inner.getTop();
+        int right = inner.getRight();
+        int bottom = inner.getBottom();
+        float cornerRadius = getCornerRadius();
+
+        float scaleX = inner.getScaleX();
+        float scaleY = inner.getScaleY();
+        if (scaleX != 1f || scaleY != 1f) {
+            float cx = (left + right) / 2f;
+            float cy = (top + bottom) / 2f;
+            float halfW = ((right - left) / 2f) * scaleX;
+            float halfH = ((bottom - top) / 2f) * scaleY;
+            left = Math.round(cx - halfW);
+            top = Math.round(cy - halfH);
+            right = Math.round(cx + halfW);
+            bottom = Math.round(cy + halfH);
+            cornerRadius = cornerRadius * Math.min(scaleX, scaleY);
+        }
+
+        boolean blurDrawn = mBackdropBlur.draw(canvas, left, top, right, bottom, cornerRadius);
+        if (mBlurDrawn != blurDrawn) {
+            mBlurDrawn = blurDrawn;
+            setUpBackground();
+        }
+    }
+
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
+        if (LauncherPrefs.DOCK_THEME.getSharedPrefKey().equals(key)
+                || LauncherPrefs.DOCK_MUSIC_SEARCH.getSharedPrefKey().equals(key)
+                || LauncherPrefs.DOCK_UNIVERSAL_SEARCH.getSharedPrefKey().equals(key)
+                || LauncherPrefs.HOTSEAT_QSB_OPACITY.getSharedPrefKey().equals(key)
+                || LauncherPrefs.HOTSEAT_QSB_STROKE_WIDTH.getSharedPrefKey().equals(key)
+                || LauncherPrefs.SEARCH_RADIUS_SIZE.getSharedPrefKey().equals(key)
+                || LauncherPrefs.SEARCH_BAR_BLUR.getSharedPrefKey().equals(key)
+                || LauncherPrefs.BLUR_DEPTH.getSharedPrefKey().equals(key)) {
+            mIsThemed = LauncherPrefs.DOCK_THEME.get(getContext());
+            updateBlurPreferences();
+            setupGIcon();
+            setupLensIcon();
+            setupMicIcon();
+            setupGeminiIcon();
+            setUpBackground();
+            clipIconRipples();
+            postInvalidate();
         }
     }
 

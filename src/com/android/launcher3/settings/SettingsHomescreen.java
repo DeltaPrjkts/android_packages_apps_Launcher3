@@ -168,6 +168,8 @@ public class SettingsHomescreen extends ComposeSettingsActivity
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
 
+            // Migrate renamed preferences before XML defaults are persisted.
+            LauncherPrefs.getPrefs(requireContext());
             getPreferenceManager().setSharedPreferencesName(LauncherFiles.SHARED_PREFERENCES_KEY);
             setPreferencesFromResource(R.xml.launcher_home_screen_preferences, rootKey);
             addSmartspacePreferences();
@@ -283,10 +285,10 @@ public class SettingsHomescreen extends ComposeSettingsActivity
                     .isCustomWidgetEnabled(getContext());
             setQsbPrefEnabled(LauncherPrefs.QSB_STYLE_GOOGLE.getSharedPrefKey(),
                     !isCompact && !customWidget);
+            setQsbPrefEnabled(LauncherPrefs.SEARCH_BAR_BLUR.getSharedPrefKey(),
+                    isDockSearch && !customWidget);
             setQsbPrefEnabled(LauncherPrefs.DOCK_SEARCH_WIDGET.getSharedPrefKey(),
                     !isCompact);
-            setQsbPrefEnabled(LauncherPrefs.COMPACT_SEARCH_BAR_BLUR.getSharedPrefKey(),
-                    isDockSearch && isCompact);
             setQsbPrefEnabled(LauncherPrefs.COMPACT_SEARCH_BAR_ACTION.getSharedPrefKey(),
                     isDockSearch && isCompact);
             setQsbPrefEnabled(LauncherPrefs.DOCK_UNIVERSAL_SEARCH.getSharedPrefKey(),

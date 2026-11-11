@@ -560,6 +560,8 @@
     <!-- QSB style -->
     <string name="qsb_style_google_title">Google-style search bar</string>
     <string name="qsb_style_google_summary">Use the QSB design with AI and Lens buttons</string>
+    <string name="search_bar_blur_title">Search bar blur</string>
+    <string name="search_bar_blur_summary">Apply blur effect to search bar background</string>
     
     <!-- Dark app drawer text -->
     <string name="all_apps_dark_text_title">Dark app labels</string>

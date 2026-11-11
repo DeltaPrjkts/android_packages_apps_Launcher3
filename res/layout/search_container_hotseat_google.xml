@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
+<com.android.launcher3.qsb.QsbGoogleOuterLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="@dimen/qsb_widget_height"
@@ -73,4 +73,4 @@
 
     </com.android.launcher3.qsb.QsbLayoutGoogle>
 
-</FrameLayout>
+</com.android.launcher3.qsb.QsbGoogleOuterLayout>

@@ -56,6 +56,7 @@ import com.android.launcher3.pageindicators.PageIndicator;
 import com.android.launcher3.pageindicators.PageIndicatorDots;
 import com.android.launcher3.qsb.CompactSearchBar;
 import com.android.launcher3.qsb.DockSearchWidgetHelper;
+import com.android.launcher3.qsb.QsbGoogleOuterLayout;
 import com.android.launcher3.qsb.QsbLayout;
 import com.android.launcher3.qsb.QsbLayoutGoogle;
 import com.android.launcher3.util.HorizontalInsettableView;
@@ -779,6 +780,9 @@ public class Hotseat extends CellLayout implements Insettable {
             View inner = mQsb.findViewById(R.id.inner);
             return inner != null ? inner : mQsb;
         }
+        if (mQsb instanceof QsbGoogleOuterLayout) {
+            return mQsb;
+        }
         if (mQsb instanceof ViewGroup group) {
             for (int i = 0; i < group.getChildCount(); i++) {
                 View child = group.getChildAt(i);
@@ -809,7 +813,9 @@ public class Hotseat extends CellLayout implements Insettable {
 
     public void playQsbSquishAnimation() {
         View target = getQsbForAppClose();
-        if (target instanceof QsbLayoutGoogle qsbGoogle) {
+        if (target instanceof QsbGoogleOuterLayout outerLayout) {
+            outerLayout.playSquishAnimation();
+        } else if (target instanceof QsbLayoutGoogle qsbGoogle) {
             qsbGoogle.playLandingSquishAnimation();
         } else if (mQsb instanceof QsbLayout qsb) {
             qsb.playLandingSquishAnimation();

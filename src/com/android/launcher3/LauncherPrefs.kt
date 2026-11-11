@@ -75,7 +75,19 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
 
     @Deprecated("Don't use shared preferences directly. Use other LauncherPref methods.")
     val backedUpPrefs: SharedPreferences
-        get() = getSharedPrefs(GRID_NAME)
+        get() = migrateSearchBarBlurPreference(getSharedPrefs(GRID_NAME))
+
+    private fun migrateSearchBarBlurPreference(prefs: SharedPreferences): SharedPreferences {
+        val legacyKey = "pref_compact_search_bar_blur"
+        val key = SEARCH_BAR_BLUR.sharedPrefKey
+        if (!prefs.contains(key) && prefs.contains(legacyKey)) {
+            prefs.edit()
+                .putBoolean(key, prefs.getBoolean(legacyKey, true))
+                .remove(legacyKey)
+                .apply()
+        }
+        return prefs
+    }
 
     @Deprecated("Don't use shared preferences directly. Use other LauncherPref methods.")
     val devicePrefs: SharedPreferences
@@ -96,6 +108,9 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
     @Suppress("IMPLICIT_CAST_TO_ANY", "UNCHECKED_CAST")
     private fun <T> getInner(item: Item, default: T): T {
         val sp = getSharedPrefs(item)
+        if (item == SEARCH_BAR_BLUR) {
+            migrateSearchBarBlurPreference(sp)
+        }
         return when {
             item.type == String::class.java -> sp.getString(item.sharedPrefKey, default as? String)
             item.type == Boolean::class.java || item.type == java.lang.Boolean::class.java ->
@@ -288,7 +303,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField val DOCK_MUSIC_SEARCH = backedUpItem("pref_dock_music_search", false)
         @JvmField val DOCK_UNIVERSAL_SEARCH = backedUpItem("pref_dock_universal_search", false)
         @JvmField val COMPACT_SEARCH_BAR = backedUpItem("pref_compact_search_bar", false)
-        @JvmField val COMPACT_SEARCH_BAR_BLUR = backedUpItem("pref_compact_search_bar_blur", true)
+        @JvmField val SEARCH_BAR_BLUR = backedUpItem("pref_search_bar_blur", true)
         @JvmField val COMPACT_SEARCH_BAR_ACTION = backedUpItem("pref_compact_search_bar_action", "google_search")
         @JvmField val QSB_STYLE_GOOGLE = backedUpItem("pref_qsb_style_google", true)
         @JvmField val DOCK_SEARCH = backedUpItem("pref_dock_search", true)
