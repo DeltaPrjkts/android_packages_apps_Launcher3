@@ -1,5 +1,12 @@
 package com.android.launcher3.qsb;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.Keyframe;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -12,20 +19,28 @@ import android.graphics.drawable.PaintDrawable;
 import android.net.Uri;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.Toast;
+
+import com.android.app.animation.Interpolators;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
 import com.android.launcher3.Utilities;
-import com.android.launcher3.qsb.QsbContainerView;
+import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.util.MultiTranslateDelegate;
 import com.android.launcher3.util.Themes;
-import android.view.View;
+import com.android.launcher3.views.FloatingIconViewCompanion;
 
-public class QsbLayout extends FrameLayout implements Reorderable {
+public class QsbLayout extends FrameLayout
+        implements Reorderable, FloatingIconViewCompanion {
 
     private static final String TAG = "QsbLayout";
+
+    private static final long SQUISH_DURATION_MS = 400L;
+    private static final long ACTION_LAUNCH_DELAY_MS = 120L;
 
     private ImageView micIcon;
     private ImageView gIcon;
@@ -37,6 +52,15 @@ public class QsbLayout extends FrameLayout implements Reorderable {
     private float mScaleForReorderBounce = 1f;
 
     private boolean mIsThemed;
+
+    private boolean mLandingSquish;
+    private static final float LANDING_SQUISH_INTENSITY = 0.55f;
+    private ObjectAnimator mSquishAnimator;
+    private View mSquishingView;
+    private boolean mIsLaunching;
+    private Runnable mPendingLaunchAction;
+    private final Runnable mLaunchRunnable = this::launchPendingAction;
+    private final Runnable mResetLaunchingRunnable = () -> mIsLaunching = false;
 
     public QsbLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -55,6 +79,13 @@ public class QsbLayout extends FrameLayout implements Reorderable {
         geminiIcon = findViewById(R.id.gemini_icon);
         inner = findViewById(R.id.inner);
 
+        ItemInfo qsbInfo = createQsbItemInfo(new Intent("android.search.action.GLOBAL_SEARCH")
+                .setPackage(Utilities.GSA_PACKAGE));
+        setTag(qsbInfo);
+        if (inner != null) {
+            inner.setTag(qsbInfo);
+        }
+
         setUpMainSearch();
         setUpBackground();
         clipIconRipples();
@@ -71,17 +102,26 @@ public class QsbLayout extends FrameLayout implements Reorderable {
         float cornerRadius = getCornerRadius();
         PaintDrawable pd = new PaintDrawable(Color.TRANSPARENT);
         pd.setCornerRadius(cornerRadius);
-        micIcon.setClipToOutline(cornerRadius > 0);
-        micIcon.setBackground(pd);
-        lensIcon.setClipToOutline(cornerRadius > 0);
-        lensIcon.setBackground(pd);
-        gIcon.setClipToOutline(cornerRadius > 0);
-        gIcon.setBackground(pd);
-        geminiIcon.setClipToOutline(cornerRadius > 0);
-        geminiIcon.setBackground(pd);
+        if (micIcon != null) {
+            micIcon.setClipToOutline(cornerRadius > 0);
+            micIcon.setBackground(pd);
+        }
+        if (lensIcon != null) {
+            lensIcon.setClipToOutline(cornerRadius > 0);
+            lensIcon.setBackground(pd);
+        }
+        if (gIcon != null) {
+            gIcon.setClipToOutline(cornerRadius > 0);
+            gIcon.setBackground(pd);
+        }
+        if (geminiIcon != null) {
+            geminiIcon.setClipToOutline(cornerRadius > 0);
+            geminiIcon.setBackground(pd);
+        }
     }
 
     private void setUpBackground() {
+        if (inner == null) return;
         float cornerRadius = getCornerRadius();
         int alphaValue = (LauncherPrefs.HOTSEAT_QSB_OPACITY.get(getContext()) * 255) / 100;
         int baseColor = Themes.getAttrColor(getContext(), R.attr.qsbFillColor);
@@ -124,7 +164,22 @@ public class QsbLayout extends FrameLayout implements Reorderable {
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        cancelSquishAnimation();
+        mIsThemed = LauncherPrefs.DOCK_THEME.get(getContext());
+        setUpMainSearch();
+        setUpBackground();
+        clipIconRipples();
+        setupGIcon();
+        setupLensIcon();
+        setupMicIcon();
+        setupGeminiIcon();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
+        cancelSquishAnimation();
         super.onDetachedFromWindow();
         setOnClickListener(null);
         if (gIcon != null) gIcon.setOnClickListener(null);
@@ -134,17 +189,67 @@ public class QsbLayout extends FrameLayout implements Reorderable {
         if (inner != null) inner.setBackground(null);
     }
 
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility != VISIBLE) {
+            cancelSquishAnimation();
+        }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (!isVisible) {
+            cancelSquishAnimation();
+        }
+    }
+
     private void setUpMainSearch() {
         setOnClickListener(view -> {
-            try {
-                Intent intent = new Intent();
-                intent.setAction("android.search.action.GLOBAL_SEARCH");
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                intent.setPackage(QsbContainerView.getSearchWidgetPackageName(view.getContext()));
-                view.getContext().startActivity(intent);
-            } catch (Exception e) {
-                Log.e(TAG, "Main search launch failed", e);
-            }
+            View target = inner != null ? inner : this;
+            handleClickWithSquish(target, () -> {
+                String searchPackage = QsbContainerView.getSearchWidgetPackageName(view.getContext());
+                if (searchPackage == null) {
+                    Toast.makeText(getContext(), R.string.activity_not_found, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try {
+                    Intent intent = new Intent("android.search.action.GLOBAL_SEARCH");
+                    intent.setPackage(searchPackage);
+                    startActivitySafely(target, intent);
+                    return;
+                } catch (ActivityNotFoundException | SecurityException e) {
+                    Log.d(TAG, "GLOBAL_SEARCH not found for " + searchPackage);
+                }
+
+                try {
+                    Intent intent = view.getContext().getPackageManager().getLaunchIntentForPackage(searchPackage);
+                    if (intent != null) {
+                        startActivitySafely(target, intent);
+                        return;
+                    }
+                } catch (ActivityNotFoundException | SecurityException e) {
+                    Log.d(TAG, "Launch intent not found for " + searchPackage);
+                }
+
+                try {
+                    Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
+                    intent.setPackage(searchPackage);
+                    startActivitySafely(target, intent);
+                    return;
+                } catch (ActivityNotFoundException | SecurityException e) {
+                    Log.d(TAG, "ACTION_WEB_SEARCH not found for " + searchPackage);
+                }
+
+                try {
+                    Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"));
+                    startActivitySafely(target, fallback);
+                } catch (Exception e) {
+                    Log.e(TAG, "Main search launch failed", e);
+                    Toast.makeText(getContext(), R.string.activity_not_found, Toast.LENGTH_SHORT).show();
+                }
+            });
         });
     }
 
@@ -155,17 +260,16 @@ public class QsbLayout extends FrameLayout implements Reorderable {
                 ? R.drawable.ic_super_g_themed
                 : R.drawable.ic_super_g_color);
 
-        gIcon.setOnClickListener(view -> {
+        gIcon.setOnClickListener(view -> handleClickWithSquish(gIcon, () -> {
             try {
                 Intent intent = view.getContext().getPackageManager().getLaunchIntentForPackage(Utilities.GSA_PACKAGE);
                 if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    view.getContext().startActivity(intent);
+                    startActivitySafely(gIcon, intent);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Google icon launch failed", e);
             }
-        });
+        }));
     }
 
     private void setupLensIcon() {
@@ -175,19 +279,25 @@ public class QsbLayout extends FrameLayout implements Reorderable {
                 ? R.drawable.ic_lens_themed
                 : R.drawable.ic_lens_color);
 
-        lensIcon.setOnClickListener(view -> {
+        lensIcon.setOnClickListener(view -> handleClickWithSquish(lensIcon, () -> {
             try {
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setComponent(new ComponentName(Utilities.GSA_PACKAGE, Utilities.LENS_ACTIVITY));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 intent.setData(Uri.parse(Utilities.LENS_URI));
                 intent.putExtra("LensHomescreenShortcut", true);
-                view.getContext().startActivity(intent);
+                startActivitySafely(lensIcon, intent);
             } catch (Exception e) {
-                lensIcon.setVisibility(View.GONE);
-                Log.e(TAG, "Lens icon launch failed", e);
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(Utilities.LENS_URI));
+                    intent.setPackage(Utilities.GSA_PACKAGE);
+                    intent.putExtra("LensHomescreenShortcut", true);
+                    startActivitySafely(lensIcon, intent);
+                } catch (Exception ex) {
+                    lensIcon.setVisibility(View.GONE);
+                    Log.e(TAG, "Lens icon launch failed", ex);
+                }
             }
-        });
+        }));
     }
 
     private void setupMicIcon() {
@@ -203,7 +313,7 @@ public class QsbLayout extends FrameLayout implements Reorderable {
                     : R.drawable.ic_mic_color);
         }
 
-        micIcon.setOnClickListener(view -> {
+        micIcon.setOnClickListener(view -> handleClickWithSquish(micIcon, () -> {
             try {
                 Intent intent = new Intent();
                 if (Utilities.isMusicSearchEnabled(view.getContext())) {
@@ -212,13 +322,12 @@ public class QsbLayout extends FrameLayout implements Reorderable {
                 } else {
                     intent.setAction("android.intent.action.VOICE_COMMAND");
                 }
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                view.getContext().startActivity(intent);
+                startActivitySafely(micIcon, intent);
             } catch (Exception e) {
                 micIcon.setVisibility(View.GONE);
                 Log.e(TAG, "Mic icon launch failed", e);
             }
-        });
+        }));
     }
 
     private void setupGeminiIcon() {
@@ -238,7 +347,7 @@ public class QsbLayout extends FrameLayout implements Reorderable {
                 ? R.drawable.ic_gemini_themed
                 : R.drawable.ic_gemini_color);
 
-        geminiIcon.setOnClickListener(view -> {
+        geminiIcon.setOnClickListener(view -> handleClickWithSquish(geminiIcon, () -> {
             if (LauncherPrefs.DOCK_UNIVERSAL_SEARCH.get(view.getContext())) {
                 UniversalSearchLauncher.launch(view.getContext());
                 return;
@@ -246,15 +355,159 @@ public class QsbLayout extends FrameLayout implements Reorderable {
             try {
                 Intent intent = view.getContext().getPackageManager().getLaunchIntentForPackage(Utilities.GEMINI_PACKAGE);
                 if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    view.getContext().startActivity(intent);
+                    startActivitySafely(geminiIcon, intent);
                 }
             } catch (Exception e) {
                 geminiIcon.setVisibility(View.GONE);
                 Log.e(TAG, "Gemini launch failed", e);
             }
-        });
+        }));
     }
+
+    private void handleClickWithSquish(View target, Runnable action) {
+        if (mIsLaunching || !isAttachedToWindow() || !isShown()) return;
+        removeCallbacks(mResetLaunchingRunnable);
+        mIsLaunching = true;
+        mPendingLaunchAction = action;
+
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            launchPendingAction();
+            return;
+        }
+
+        playSquishAnimation(target);
+        postDelayed(mLaunchRunnable,
+                (long) (ACTION_LAUNCH_DELAY_MS * ValueAnimator.getDurationScale()));
+    }
+
+    private void launchPendingAction() {
+        Runnable action = mPendingLaunchAction;
+        mPendingLaunchAction = null;
+        if (action == null) return;
+        if (!isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE) {
+            cancelSquishAnimation();
+            return;
+        }
+        try {
+            action.run();
+        } finally {
+            if (isAttachedToWindow() && isShown()) {
+                postDelayed(mResetLaunchingRunnable, 300);
+            } else {
+                mIsLaunching = false;
+            }
+        }
+    }
+
+    /** Gentler squish played when the app-close animation lands on the search bar. */
+    public void playLandingSquishAnimation() {
+        if (mIsLaunching || !isAttachedToWindow() || !isShown()) return;
+        mLandingSquish = true;
+        playSquishAnimation();
+    }
+
+    public void playSquishAnimation() {
+        playSquishAnimation(inner != null ? inner : this);
+    }
+
+    private void playSquishAnimation(View target) {
+        if (target == null) return;
+        final float k = mLandingSquish ? LANDING_SQUISH_INTENSITY : 1f;
+        mLandingSquish = false;
+
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+        }
+
+        mSquishingView = target;
+        target.setScaleX(1f);
+        target.setScaleY(1f);
+        if (target.getWidth() > 0 && target.getHeight() > 0) {
+            target.setPivotX(target.getWidth() / 2f);
+            target.setPivotY(target.getHeight() / 2f);
+        }
+
+        Keyframe kf0X = Keyframe.ofFloat(0f, 1f);
+        Keyframe kf1X = Keyframe.ofFloat(120f / 400f, 1f + 0.066f * k);
+        kf1X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf2X = Keyframe.ofFloat(260f / 400f, 1f - 0.033f * k);
+        kf2X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf3X = Keyframe.ofFloat(1f, 1f);
+        kf3X.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        PropertyValuesHolder pvhScaleX = PropertyValuesHolder.ofKeyframe(
+                View.SCALE_X, kf0X, kf1X, kf2X, kf3X);
+
+        Keyframe kf0Y = Keyframe.ofFloat(0f, 1f);
+        Keyframe kf1Y = Keyframe.ofFloat(120f / 400f, 1f - 0.055f * k);
+        kf1Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf2Y = Keyframe.ofFloat(260f / 400f, 1f + 0.033f * k);
+        kf2Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        Keyframe kf3Y = Keyframe.ofFloat(1f, 1f);
+        kf3Y.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        PropertyValuesHolder pvhScaleY = PropertyValuesHolder.ofKeyframe(
+                View.SCALE_Y, kf0Y, kf1Y, kf2Y, kf3Y);
+
+        mSquishAnimator = ObjectAnimator.ofPropertyValuesHolder(target, pvhScaleX, pvhScaleY);
+        mSquishAnimator.setDuration(SQUISH_DURATION_MS);
+        mSquishAnimator.setInterpolator(Interpolators.LINEAR);
+        mSquishAnimator.addUpdateListener(anim -> {
+            target.invalidate();
+            invalidate();
+            if (target.getParent() instanceof View parent) {
+                parent.invalidate();
+            }
+        });
+        mSquishAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                resetSquishState();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                resetSquishState();
+            }
+        });
+        mSquishAnimator.start();
+    }
+
+    private void resetSquishState() {
+        if (mSquishingView != null) {
+            mSquishingView.setScaleX(1f);
+            mSquishingView.setScaleY(1f);
+            mSquishingView.invalidate();
+            mSquishingView = null;
+        }
+        mSquishAnimator = null;
+        invalidate();
+    }
+
+    private void cancelSquishAnimation() {
+        removeCallbacks(mLaunchRunnable);
+        removeCallbacks(mResetLaunchingRunnable);
+        mPendingLaunchAction = null;
+        mLandingSquish = false;
+        if (mSquishAnimator != null) {
+            mSquishAnimator.cancel();
+        }
+        resetSquishState();
+        mIsLaunching = false;
+    }
+
+    private ItemInfo createQsbItemInfo(Intent intent) {
+        return QsbActivityLauncher.createItemInfo(intent);
+    }
+
+    private void startActivitySafely(View view, Intent intent) {
+        QsbActivityLauncher.startActivity(getContext(), view, intent);
+    }
+
+    @Override
+    public void setIconVisible(boolean visible) {
+    }
+
+    @Override
+    public void setForceHideDot(boolean hide) {}
 
     private float getCornerRadius() {
         Resources res = getContext().getResources();

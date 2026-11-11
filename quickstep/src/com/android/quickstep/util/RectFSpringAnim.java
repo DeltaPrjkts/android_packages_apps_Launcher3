@@ -150,6 +150,7 @@ public class RectFSpringAnim extends ReleaseCheck {
     private final boolean mUseConfiguredSpring;
     private final boolean mCos;
     private final boolean mNothing;
+    private final boolean mQsb;
     private long mCosStartTime;
     private float mCosDurationScale;
     private float mCosFadeProgress;
@@ -175,6 +176,7 @@ public class RectFSpringAnim extends ReleaseCheck {
         mRectDamping = config.rectDamping;
         mCos = config instanceof CosSpringConfig;
         mNothing = config instanceof NothingSpringConfig;
+        mQsb = config instanceof QsbSpringConfig;
         mFrameUpdate = mCos ? this::dispatchFrameUpdate : null;
         mUseConfiguredSpring = mCos || mNothing
                 || config instanceof WidgetSpringConfig;
@@ -312,6 +314,11 @@ public class RectFSpringAnim extends ReleaseCheck {
                 yVelocityPxPerS, mCos ? 500 : sCachedMinVelocityYPxPerS,
                 mCos ? 2500 : sCachedMaxVelocityYPxPerS,
                 sCachedFallOffFactor);
+
+        if (mQsb) {
+            xVelocityPxPerS *= 0.4f;
+            yVelocityPxPerS *= 0.4f;
+        }
 
         float stiffnessScale = mNothing && ValueAnimator.areAnimatorsEnabled()
                 ? 1f / ValueAnimator.getDurationScale() : 1f;
@@ -642,7 +649,7 @@ public class RectFSpringAnim extends ReleaseCheck {
         }
     }
 
-    public static final class NothingSpringConfig extends DefaultSpringConfig {
+    public static class NothingSpringConfig extends DefaultSpringConfig {
         public NothingSpringConfig(Context context, DeviceProfile deviceProfile,
                 RectF startRect, RectF targetRect) {
             super(context, deviceProfile, startRect, targetRect);
@@ -656,6 +663,23 @@ public class RectFSpringAnim extends ReleaseCheck {
                 RectF startRect, RectF targetRect, @Tracking int tracking) {
             this(context, deviceProfile, startRect, targetRect);
             this.tracking = tracking;
+        }
+    }
+
+    /**
+     * Softer, slightly under-damped spring used when the app closes into the search bar, so the
+     * window glides into the pill instead of snapping to it.
+     */
+    public static final class QsbSpringConfig extends NothingSpringConfig {
+        public QsbSpringConfig(Context context, DeviceProfile deviceProfile,
+                RectF startRect, RectF targetRect) {
+            super(context, deviceProfile, startRect, targetRect, TRACKING_CENTER);
+            stiffnessX = 120f;
+            stiffnessY = 105f;
+            rectStiffness = 130f;
+            dampingX = 0.95f;
+            dampingY = 0.92f;
+            rectDamping = 1f;
         }
     }
 

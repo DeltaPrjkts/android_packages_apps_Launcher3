@@ -24,12 +24,15 @@ import static com.android.launcher3.util.MultiTranslateDelegate.INDEX_BUBBLE_ADJ
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Process;
 import android.util.AttributeSet;
 import android.view.CrossWindowBlurListeners;
 import android.view.Gravity;
@@ -48,10 +51,13 @@ import com.android.axion.blur.ui.view.AxViewBackdropBlur;
 import com.android.launcher3.ShortcutAndWidgetContainer.TranslationProvider;
 import com.android.launcher3.celllayout.CellLayoutLayoutParams;
 import com.android.launcher3.model.data.ItemInfo;
+import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.pageindicators.PageIndicator;
 import com.android.launcher3.pageindicators.PageIndicatorDots;
 import com.android.launcher3.qsb.CompactSearchBar;
 import com.android.launcher3.qsb.DockSearchWidgetHelper;
+import com.android.launcher3.qsb.QsbLayout;
+import com.android.launcher3.qsb.QsbLayoutGoogle;
 import com.android.launcher3.util.HorizontalInsettableView;
 import com.android.launcher3.util.LauncherBindableItemsContainer.ItemOperator;
 import com.android.launcher3.util.MultiPropertyFactory;
@@ -175,8 +181,10 @@ public class Hotseat extends CellLayout implements Insettable {
         if (Utilities.isGSAEnabled(context)
                 && LauncherPrefs.DOCK_SEARCH.get(context)
                 && LauncherPrefs.COMPACT_SEARCH_BAR.get(context)) {
-            return LayoutInflater.from(context).inflate(R.layout.search_container_hotseat_compact,
+            View view = LayoutInflater.from(context).inflate(R.layout.search_container_hotseat_compact,
                     this, false);
+            bindQsbTag(view);
+            return view;
         }
         if (!Utilities.showQSB(context)) {
             return LayoutInflater.from(context).inflate(R.layout.empty_view, this, false);
@@ -189,7 +197,30 @@ public class Hotseat extends CellLayout implements Insettable {
         int qsbLayout = useGoogleStyle
                 ? R.layout.search_container_hotseat_google
                 : R.layout.search_container_hotseat;
-        return LayoutInflater.from(context).inflate(qsbLayout, this, false);
+        View view = LayoutInflater.from(context).inflate(qsbLayout, this, false);
+        bindQsbTag(view);
+        return view;
+    }
+
+    private void bindQsbTag(View view) {
+        if (view == null) return;
+        WorkspaceItemInfo qsbInfo = new WorkspaceItemInfo();
+        qsbInfo.id = R.id.search_container_hotseat;
+        qsbInfo.container = LauncherSettings.Favorites.CONTAINER_HOTSEAT;
+        qsbInfo.itemType = LauncherSettings.Favorites.ITEM_TYPE_APPLICATION;
+        qsbInfo.user = Process.myUserHandle();
+        qsbInfo.intent = new Intent("android.search.action.GLOBAL_SEARCH")
+                .setPackage(Utilities.GSA_PACKAGE)
+                .setComponent(new ComponentName(Utilities.GSA_PACKAGE, ""));
+        view.setTag(qsbInfo);
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getTag() == null) {
+                    child.setTag(qsbInfo);
+                }
+            }
+        }
     }
 
     private void updateQsbAnimationChannels() {
@@ -733,6 +764,58 @@ public class Hotseat extends CellLayout implements Insettable {
      */
     public View getQsb() {
         return mQsb;
+    }
+
+    @Nullable
+    public View getQsbForAppClose() {
+        if (mQsb == null || mQsb.getVisibility() != VISIBLE) {
+            return null;
+        }
+        if (mQsb instanceof CompactSearchBar) {
+            View inner = mQsb.findViewById(R.id.compact_search_bar_inner);
+            return inner != null ? inner : mQsb;
+        }
+        if (mQsb instanceof QsbLayout) {
+            View inner = mQsb.findViewById(R.id.inner);
+            return inner != null ? inner : mQsb;
+        }
+        if (mQsb instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof QsbLayoutGoogle) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    public boolean isQsbView(@Nullable View v) {
+        if (v == null || getQsbForAppClose() == null) return false;
+        while (v != null) {
+            if (v == mQsb) return true;
+            v = v.getParent() instanceof View parent ? parent : null;
+        }
+        return false;
+    }
+
+    public void setQsbItemInfo(ItemInfo info) {
+        if (mQsb != null) {
+            mQsb.setTag(info);
+            View target = getQsbForAppClose();
+            if (target != null) target.setTag(info);
+        }
+    }
+
+    public void playQsbSquishAnimation() {
+        View target = getQsbForAppClose();
+        if (target instanceof QsbLayoutGoogle qsbGoogle) {
+            qsbGoogle.playLandingSquishAnimation();
+        } else if (mQsb instanceof QsbLayout qsb) {
+            qsb.playLandingSquishAnimation();
+        } else if (mQsb instanceof CompactSearchBar compactBar) {
+            compactBar.playLandingSquishAnimation();
+        }
     }
 
     @Nullable

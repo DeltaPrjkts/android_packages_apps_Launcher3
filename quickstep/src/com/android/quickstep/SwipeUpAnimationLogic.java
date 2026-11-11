@@ -200,6 +200,11 @@ public abstract class SwipeUpAnimationLogic implements
             return false;
         }
 
+        /** Returns true if the animation target is the dock search bar. */
+        public boolean isQsb() {
+            return false;
+        }
+
         public @NonNull RectF getWindowTargetRect() {
             PagedOrientationHandler orientationHandler = getOrientationHandler();
             DeviceProfile dp = mDp;
@@ -402,7 +407,10 @@ public abstract class SwipeUpAnimationLogic implements
                 && homeAnimationFactory.isInHotseat();
         boolean cos = CosAppAnimation.isEnabled(mContext)
                 && homeAnimationFactory.shouldUseCosCloseAnimation();
-        RectFSpringAnim anim = cos
+        RectFSpringAnim anim = homeAnimationFactory.isQsb()
+                ? new RectFSpringAnim(new RectFSpringAnim.QsbSpringConfig(
+                        mContext, mDp, startRect, targetRect))
+                : cos
                 ? new RectFSpringAnim(new CosSpringConfig(mContext, mDp, startRect, targetRect))
                 : !CosAppAnimation.isEnabled(mContext)
                 ? new RectFSpringAnim(new NothingSpringConfig(mContext, mDp, startRect, targetRect))
@@ -488,9 +496,11 @@ public abstract class SwipeUpAnimationLogic implements
             // rounding at the end of the animation.
             mStartRadius = taskViewSimulator.getCurrentCornerRadius();
             float endRadius = factory.getEndRadius(cropRectF);
-            mEndRadius = mNothingAnimation && !factory.isWidget()
-                    ? endRadius * spring.getTargetRect().width() / Math.max(1f, cropRectF.width())
-                    : endRadius;
+            mEndRadius = factory.isQsb()
+                    ? endRadius
+                    : (mNothingAnimation && !factory.isWidget()
+                            ? endRadius * spring.getTargetRect().width() / Math.max(1f, cropRectF.width())
+                            : endRadius);
 
             mRunningTaskViewStartRectF = invariantStartRect;
             mTargetTaskView = factory.getTargetTaskView();

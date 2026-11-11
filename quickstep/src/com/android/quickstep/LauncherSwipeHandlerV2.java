@@ -21,6 +21,8 @@ import static com.android.launcher3.Utilities.mapBoundToRange;
 import static com.android.launcher3.views.FloatingIconView.SHAPE_PROGRESS_DURATION;
 import static com.android.quickstep.util.FloatingIconViewHelper.getFloatingIconView;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.content.Context;
 import android.graphics.Rect;
@@ -230,6 +232,10 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                     return btv.getIconBackgroundCornerRadius()
                             * (cropRectF.width() / targetWidth);
                 }
+                if (mContainer != null && mContainer.getHotseat() != null
+                        && mContainer.getHotseat().isQsbView(workspaceView)) {
+                    return Math.min(cropRectF.width(), cropRectF.height()) / 2f;
+                }
                 return super.getEndRadius(cropRectF);
             }
 
@@ -238,6 +244,26 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 super.setAnimation(anim);
                 mSiblingAnimation = anim;
                 mSiblingAnimation.addAnimatorListener(floatingIconView);
+                if (mContainer != null && mContainer.getHotseat() != null
+                        && mContainer.getHotseat().isQsbView(workspaceView)) {
+                    final boolean[] squished = {false};
+                    final Runnable playSquish = () -> {
+                        if (squished[0]) return;
+                        squished[0] = true;
+                        if (mContainer != null && mContainer.getHotseat() != null) {
+                            mContainer.getHotseat().playQsbSquishAnimation();
+                        }
+                    };
+                    mSiblingAnimation.addOnUpdateListener((rect, progress) -> {
+                        if (progress >= 0.9f) playSquish.run();
+                    });
+                    mSiblingAnimation.addAnimatorListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            playSquish.run();
+                        }
+                    });
+                }
                 floatingIconView.setAllowParallelAnimation(anim.isCos());
                 floatingIconView.setOnTargetChangeListener(
                         mSiblingAnimation::onTargetPositionChanged);
@@ -245,8 +271,14 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
             }
 
             @Override
+            public boolean isQsb() {
+                return mContainer != null && mContainer.getHotseat() != null
+                        && mContainer.getHotseat().isQsbView(workspaceView);
+            }
+
+            @Override
             public boolean shouldUseCosCloseAnimation() {
-                return isAnimatingIntoIcon() && !isTargetTranslucent
+                return !isQsb() && isAnimatingIntoIcon() && !isTargetTranslucent
                         && targetTaskView == null && !mIsSwipeForSplit && !mIsSwipingPipToHome
                         && mRemoteTargetHandles.length == 1;
             }
@@ -255,6 +287,10 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
             protected float getWindowAlpha(float progress) {
                 if (mSiblingAnimation != null && mSiblingAnimation.isCos()) {
                     return 1f - mSiblingAnimation.getCosFadeProgress();
+                }
+                if (mSiblingAnimation != null && mSiblingAnimation.isNothing() && isQsb()) {
+                    float t = Math.max(0f, Math.min(1f, (progress - 0.3f) / 0.65f));
+                    return 1f - t * t * (3f - 2f * t);
                 }
                 return mSiblingAnimation != null && mSiblingAnimation.isNothing()
                         ? NothingAppAnimation.getWindowAlpha(progress, false)
@@ -277,7 +313,8 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                         ? 1f
                         : Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
                 float shapeProgressStart = cos ? 0f : useNothingAnimation
-                        ? NothingAppAnimation.SHAPE_PROGRESS_START : windowAlphaThreshold;
+                        ? (isQsb() ? 0.5f : NothingAppAnimation.SHAPE_PROGRESS_START)
+                        : windowAlphaThreshold;
                 floatingIconView.update(iconAlpha, currentRect, progress, shapeProgressStart,
                         radius, false, overlayAlpha);
             }
